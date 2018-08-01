@@ -19,7 +19,7 @@ func (e *Execute) Task() string {
 	return e.task
 }
 
-// Decode decodes task's input data to out.
-func (e *Execute) Decode(out interface{}) error {
+// Data decodes task's input data to out.
+func (e *Execute) Data(out interface{}) error {
 	return json.Unmarshal([]byte(e.data), out)
 }

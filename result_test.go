@@ -9,6 +9,7 @@ import (
 
 func TestWhenResult(t *testing.T) {
 	resultServiceID := "1"
+	taskData := taskRequest{"https://mesg.tech"}
 	taskServiceID := "2"
 	task := "3"
 
@@ -22,6 +23,9 @@ func TestWhenResult(t *testing.T) {
 		defer wg.Done()
 		stream, err := app.
 			WhenResult(resultServiceID).
+			Map(func(*Result) Data {
+				return taskData
+			}).
 			Execute(taskServiceID, task)
 		assert.Nil(t, err)
 		assert.NotNil(t, stream)

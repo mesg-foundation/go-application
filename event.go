@@ -3,6 +3,7 @@ package mesg
 import (
 	"context"
 	"encoding/json"
+	"sync"
 
 	"github.com/mesg-foundation/core/api/core"
 )
@@ -13,13 +14,13 @@ type Event struct {
 	data string
 }
 
-// Decode decodes event data into out.
-func (e *Event) Decode(out interface{}) error {
+// Data decodes event data into out.
+func (e *Event) Data(out interface{}) error {
 	return json.Unmarshal([]byte(e.data), out)
 }
 
-// EventListener is a MESG event listener.
-type EventListener struct {
+// EventEmitter is a MESG event emitter.
+type EventEmitter struct {
 	app *Application
 
 	// event is the actual event to listen for.
@@ -34,77 +35,76 @@ type EventListener struct {
 	// taskServiceID is the service id of target task.
 	taskServiceID string
 
-	// filterFunc is a func that returns a boolean value to check
+	// filterFuncs holds funcs that returns boolean values to decide
 	// if the task should be executed or not.
-	filterFunc func(*Event) bool
-
-	mapData Data
+	filterFuncs []func(*Event) bool
 
 	// provideFunc is a func that returns input data of task.
 	mapFunc func(*Event) Data
+
+	// m protects emitter configuration.
+	m sync.RWMutex
 
 	// cancel cancels listening for upcoming events.
 	cancel context.CancelFunc
 }
 
 // EventOption is the configuration func of EventListener.
-type EventOption func(*EventListener)
+type EventOption func(*EventEmitter)
 
 // EventFilterOption returns a new option to filter events by name.
 // Default is all(*).
 func EventFilterOption(event string) EventOption {
-	return func(l *EventListener) {
+	return func(l *EventEmitter) {
 		l.event = event
 	}
 }
 
 // WhenEvent creates an EventListener for serviceID.
-func (a *Application) WhenEvent(serviceID string, options ...EventOption) *EventListener {
-	l := &EventListener{
+func (a *Application) WhenEvent(serviceID string, options ...EventOption) *EventEmitter {
+	e := &EventEmitter{
 		app:            a,
 		eventServiceID: serviceID,
 		event:          "*",
 	}
 	for _, option := range options {
-		option(l)
+		option(e)
 	}
-	return l
+	return e
 }
 
-// FilterFunc expects the returned value to be true to do task execution.
-func (l *EventListener) FilterFunc(fn func(*Event) bool) *EventListener {
-	l.filterFunc = fn
-	return l
+// Filter expects the returned value to be true to do task execution.
+func (e *EventEmitter) Filter(fn func(*Event) bool) *EventEmitter {
+	e.m.Lock()
+	defer e.m.Unlock()
+	e.filterFuncs = append(e.filterFuncs, fn)
+	return e
 }
 
 // Data is piped as the input data to task.
 type Data interface{}
 
-// Map sets data as the input data to task.
-func (l *EventListener) Map(data Data) *EventListener {
-	l.mapData = data
-	return l
-}
-
-// MapFunc sets the returned data as the input data of task.
+// Map sets the returned data as the input data of task.
 // You can dynamically produce input values for task over event data.
-func (l *EventListener) MapFunc(fn func(*Event) Data) *EventListener {
-	l.mapFunc = fn
-	return l
+func (e *EventEmitter) Map(fn func(*Event) Data) *Executor {
+	e.m.Lock()
+	defer e.m.Unlock()
+	e.mapFunc = fn
+	return newEventEmitterExecutor(e)
 }
 
 // Execute executes task on serviceID.
-func (l *EventListener) Execute(serviceID, task string) (*Stream, error) {
-	l.taskServiceID = serviceID
-	l.task = task
+func (e *EventEmitter) start(serviceID, task string) (*Stream, error) {
+	e.taskServiceID = serviceID
+	e.task = task
 	stream := &Stream{
 		Executions: make(chan *Execution, 0),
 		Err:        make(chan error, 0),
 	}
-	if err := l.app.startServices(l.eventServiceID, serviceID); err != nil {
+	if err := e.app.startServices(e.eventServiceID, serviceID); err != nil {
 		return nil, err
 	}
-	cancel, err := l.listen(stream)
+	cancel, err := e.listen(stream)
 	if err != nil {
 		return nil, err
 	}
@@ -113,20 +113,20 @@ func (l *EventListener) Execute(serviceID, task string) (*Stream, error) {
 }
 
 // Listen starts listening for events.
-func (l *EventListener) listen(stream *Stream) (context.CancelFunc, error) {
+func (e *EventEmitter) listen(stream *Stream) (context.CancelFunc, error) {
 	ctx, cancel := context.WithCancel(context.Background())
-	resp, err := l.app.client.ListenEvent(ctx, &core.ListenEventRequest{
-		ServiceID:   l.eventServiceID,
-		EventFilter: l.event,
+	resp, err := e.app.client.ListenEvent(ctx, &core.ListenEventRequest{
+		ServiceID:   e.eventServiceID,
+		EventFilter: e.event,
 	})
 	if err != nil {
 		return cancel, err
 	}
-	go l.readStream(stream, resp)
+	go e.readStream(stream, resp)
 	return cancel, nil
 }
 
-func (l *EventListener) readStream(stream *Stream, resp core.Core_ListenEventClient) {
+func (e *EventEmitter) readStream(stream *Stream, resp core.Core_ListenEventClient) {
 	for {
 		data, err := resp.Recv()
 		if err != nil {
@@ -137,31 +137,31 @@ func (l *EventListener) readStream(stream *Stream, resp core.Core_ListenEventCli
 			Key:  data.EventKey,
 			data: data.EventData,
 		}
-		go l.execute(stream, event)
+		go e.execute(stream, event)
 	}
 }
 
-func (l *EventListener) execute(stream *Stream, event *Event) {
-	if l.filterFunc != nil && !l.filterFunc(event) {
-		return
-	}
-
-	var data Data
-	switch {
-	case l.mapData != nil:
-		data = l.mapData
-	case l.mapFunc != nil:
-		data = l.mapFunc(event)
-	default:
-		if err := event.Decode(&data); err != nil {
-			stream.Executions <- &Execution{
-				Err: err,
-			}
+func (e *EventEmitter) execute(stream *Stream, event *Event) {
+	e.m.RLock()
+	for _, filterFunc := range e.filterFuncs {
+		if !filterFunc(event) {
+			e.m.RUnlock()
 			return
 		}
 	}
+	e.m.RUnlock()
 
-	executionID, err := l.app.Execute(l.taskServiceID, l.task, data)
+	var data Data
+	if e.mapFunc != nil {
+		data = e.mapFunc(event)
+	} else if err := event.Data(&data); err != nil {
+		stream.Executions <- &Execution{
+			Err: err,
+		}
+		return
+	}
+
+	executionID, err := e.app.execute(e.taskServiceID, e.task, data)
 	stream.Executions <- &Execution{
 		ID:  executionID,
 		Err: err,

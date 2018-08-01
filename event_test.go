@@ -13,6 +13,7 @@ func TestWhenEvent(t *testing.T) {
 	eventServiceID := "1"
 	taskServiceID := "2"
 	task := "3"
+	taskData := taskRequest{"https://mesg.com"}
 
 	app, server := newApplicationAndServer(t)
 	go server.Start()
@@ -24,6 +25,9 @@ func TestWhenEvent(t *testing.T) {
 		defer wg.Done()
 		stream, err := app.
 			WhenEvent(eventServiceID).
+			Map(func(*Event) Data {
+				return taskData
+			}).
 			Execute(taskServiceID, task)
 		assert.Nil(t, err)
 		assert.NotNil(t, stream)
@@ -41,6 +45,7 @@ func TestWhenEventWithEventFilter(t *testing.T) {
 	taskServiceID := "x2"
 	task := "send"
 	event := "request"
+	taskData := taskRequest{"https://mesg.com"}
 
 	app, server := newApplicationAndServer(t)
 	go server.Start()
@@ -52,6 +57,9 @@ func TestWhenEventWithEventFilter(t *testing.T) {
 		defer wg.Done()
 		stream, err := app.
 			WhenEvent(eventServiceID, EventFilterOption(event)).
+			Map(func(*Event) Data {
+				return taskData
+			}).
 			Execute(taskServiceID, task)
 		assert.Nil(t, err)
 		assert.NotNil(t, stream)
@@ -66,6 +74,7 @@ func TestWhenEventWithEventFilter(t *testing.T) {
 
 func TestWhenEventServiceStart(t *testing.T) {
 	eventServiceID := "1"
+	taskData := taskRequest{"https://mesg.com"}
 	taskServiceID := "2"
 	task := "3"
 
@@ -86,12 +95,17 @@ func TestWhenEventServiceStart(t *testing.T) {
 		assert.True(t, stringSliceContains(lastStartIDs, taskServiceID))
 	}()
 
-	app.WhenEvent(eventServiceID).Execute(taskServiceID, task)
+	app.WhenEvent(eventServiceID).
+		Map(func(*Event) Data {
+			return taskData
+		}).
+		Execute(taskServiceID, task)
 
 	wg.Wait()
 }
 func TestWhenEventServiceStartError(t *testing.T) {
 	eventServiceID := "1"
+	taskData := taskRequest{"https://mesg.com"}
 	taskServiceID := "non-existent-task-service"
 	task := "3"
 
@@ -99,7 +113,11 @@ func TestWhenEventServiceStartError(t *testing.T) {
 	go server.Start()
 	server.MarkServiceAsNonExistent(taskServiceID)
 
-	stream, err := app.WhenEvent(eventServiceID).Execute(taskServiceID, task)
+	stream, err := app.WhenEvent(eventServiceID).
+		Map(func(*Event) Data {
+			return taskData
+		}).
+		Execute(taskServiceID, task)
 	assert.NotNil(t, err)
 	assert.Nil(t, stream)
 }
@@ -134,21 +152,23 @@ func TestWhenEventExecute(t *testing.T) {
 		assert.Equal(t, task, e.Task())
 
 		var data taskRequest
-		assert.Nil(t, e.Decode(&data))
+		assert.Nil(t, e.Data(&data))
 		assert.Equal(t, reqData.URL, data.URL)
 	}()
 
 	wg.Add(1)
 	stream, err := app.
 		WhenEvent(eventServiceID).
-		FilterFunc(func(event *Event) bool {
+		Filter(func(event *Event) bool {
 			defer wg.Done()
 			var data eventData
-			assert.Nil(t, event.Decode(&data))
+			assert.Nil(t, event.Data(&data))
 			assert.Equal(t, evData.URL, data.URL)
 			return true
 		}).
-		Map(reqData).
+		Map(func(*Event) Data {
+			return reqData
+		}).
 		Execute(taskServiceID, task)
 
 	assert.Nil(t, err)
@@ -167,6 +187,7 @@ func TestWhenEventClose(t *testing.T) {
 	eventServiceID := "1"
 	taskServiceID := "2"
 	task := "3"
+	taskData := taskRequest{"https://mesg.com"}
 	event := "4"
 	evData := eventData{"https://mesg.com"}
 
@@ -176,6 +197,9 @@ func TestWhenEventClose(t *testing.T) {
 
 	stream, err := app.
 		WhenEvent(eventServiceID).
+		Map(func(*Event) Data {
+			return taskData
+		}).
 		Execute(taskServiceID, task)
 
 	assert.Nil(t, err)

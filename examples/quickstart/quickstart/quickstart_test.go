@@ -41,7 +41,7 @@ func TestWhenRequest(t *testing.T) {
 	assert.Equal(t, "send", le.Task())
 
 	var data sendgridRequest
-	assert.Nil(t, le.Decode(&data))
+	assert.Nil(t, le.Data(&data))
 	assert.Equal(t, config.SendgridKey, data.SendgridAPIKey)
 	assert.Equal(t, config.Email, data.Email)
 }
@@ -65,7 +65,7 @@ func TestWhenResult(t *testing.T) {
 	assert.Equal(t, "log", le.Task())
 
 	var data logRequest
-	assert.Nil(t, le.Decode(&data))
+	assert.Nil(t, le.Data(&data))
 	assert.Equal(t, config.DiscordInvServiceID, data.ServiceID)
 	assert.Equal(t, ldata.Info, data.Data.(map[string]interface{})["info"])
 }

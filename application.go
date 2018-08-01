@@ -15,7 +15,7 @@ import (
 )
 
 const (
-	endpointEnv     = "MESG_ENDPOINT_TCP"
+	endpointEnv     = "MESG_ENDPOINT"
 	defaultEndpoint = "localhost:50052"
 )
 
@@ -89,10 +89,8 @@ func (a *Application) setupCoreClient() error {
 	return nil
 }
 
-// Execute executes a task for serviceID with given data. Task results set into
-// out, if out set to nil Execute will not block to receive a result from task.
-// Use WhenResult to dynamically wait for task results.
-func (a *Application) Execute(serviceID, task string, data Data) (executionID string, err error) {
+// execute executes a task for serviceID with given data.
+func (a *Application) execute(serviceID, task string, data Data) (executionID string, err error) {
 	inputDataBytes, err := json.Marshal(data)
 	if err != nil {
 		return "", err

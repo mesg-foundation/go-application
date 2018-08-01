@@ -42,11 +42,11 @@ func TestExecute(t *testing.T) {
 		assert.Equal(t, task, execution.Task())
 
 		var data taskRequest
-		assert.Nil(t, execution.Decode(&data))
+		assert.Nil(t, execution.Data(&data))
 		assert.Equal(t, reqData.URL, data.URL)
 	}()
 
-	executionID, err := app.Execute(serviceID, task, reqData)
+	executionID, err := app.execute(serviceID, task, reqData)
 	assert.Nil(t, err)
 	assert.True(t, executionID != "")
 

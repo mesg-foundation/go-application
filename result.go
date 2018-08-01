@@ -3,6 +3,7 @@ package mesg
 import (
 	"context"
 	"encoding/json"
+	"sync"
 
 	"github.com/mesg-foundation/core/api/core"
 )
@@ -15,13 +16,13 @@ type Result struct {
 	executionID string
 }
 
-// Decode decodes result data into out.
-func (e *Result) Decode(out interface{}) error {
+// Data decodes result data into out.
+func (e *Result) Data(out interface{}) error {
 	return json.Unmarshal([]byte(e.data), out)
 }
 
-// ResultListener is a MESG result event listener.
-type ResultListener struct {
+// ResultEmitter is a MESG result event listener.
+type ResultEmitter struct {
 	app *Application
 
 	// resultTask is the actual event to listen for.
@@ -39,26 +40,27 @@ type ResultListener struct {
 	// taskServiceID is the service id of target task.
 	taskServiceID string
 
-	// filterFunc is a func that returns a boolean value to check
+	// filterFuncs holds funcs that returns boolean values to decide
 	// if the task should be executed or not.
-	filterFunc func(*Result) bool
-
-	mapData Data
+	filterFuncs []func(*Result) bool
 
 	// mapFunc is a func that returns input data of task.
 	mapFunc func(*Result) Data
+
+	// m protects emitter configuration.
+	m sync.RWMutex
 
 	// cancel cancels listening for upcoming events.
 	cancel context.CancelFunc
 }
 
-// ResultOption is the configuration func of ResultListener.
-type ResultOption func(*ResultListener)
+// ResultOption is the configuration func of ResultEmitter.
+type ResultOption func(*ResultEmitter)
 
 // TaskFilterOption returns a new option to filter results by task name.
 // Default is all(*).
 func TaskFilterOption(task string) ResultOption {
-	return func(l *ResultListener) {
+	return func(l *ResultEmitter) {
 		l.resultTask = task
 	}
 }
@@ -66,53 +68,54 @@ func TaskFilterOption(task string) ResultOption {
 // OutputKeyFilterOption returns a new option to filter results by output key name.
 // Default is all(*).
 func OutputKeyFilterOption(key string) ResultOption {
-	return func(l *ResultListener) {
+	return func(l *ResultEmitter) {
 		l.outputKey = key
 	}
 }
 
-// WhenResult creates a ResultListener for serviceID.
-func (a *Application) WhenResult(serviceID string, options ...ResultOption) *ResultListener {
-	l := &ResultListener{
+// WhenResult creates a ResultEmitter for serviceID.
+func (a *Application) WhenResult(serviceID string, options ...ResultOption) *ResultEmitter {
+	e := &ResultEmitter{
 		app:             a,
 		resultServiceID: serviceID,
 		resultTask:      "*",
 		outputKey:       "*",
 	}
 	for _, option := range options {
-		option(l)
+		option(e)
 	}
-	return l
+	return e
 }
 
-// FilterFunc expects the returned value to be true to do task execution.
-func (l *ResultListener) FilterFunc(fn func(*Result) bool) *ResultListener {
-	l.filterFunc = fn
-	return l
+// Filter expects the returned value to be true to do task execution.
+func (e *ResultEmitter) Filter(fn func(*Result) bool) *ResultEmitter {
+	e.m.Lock()
+	defer e.m.Unlock()
+	e.filterFuncs = append(e.filterFuncs, fn)
+	return e
 }
 
-// Map sets data as the input data to task.
-func (l *ResultListener) Map(data Data) *ResultListener {
-	l.mapData = data
-	return l
-}
-
-// MapFunc sets the returned data as the input data of task.
+// Map sets the returned data as the input data of task.
 // You can dynamically produce input values for task over result data.
-func (l *ResultListener) MapFunc(fn func(*Result) Data) *ResultListener {
-	l.mapFunc = fn
-	return l
+func (e *ResultEmitter) Map(fn func(*Result) Data) *Executor {
+	e.m.Lock()
+	defer e.m.Unlock()
+	e.mapFunc = fn
+	return newResultEmitterExecutor(e)
 }
 
 // Execute executes task on serviceID.
-func (l *ResultListener) Execute(serviceID, task string) (*Stream, error) {
-	l.taskServiceID = serviceID
-	l.task = task
+func (e *ResultEmitter) start(serviceID, task string) (*Stream, error) {
+	e.taskServiceID = serviceID
+	e.task = task
 	stream := &Stream{
 		Executions: make(chan *Execution, 0),
 		Err:        make(chan error, 0),
 	}
-	cancel, err := l.listen(stream)
+	if err := e.app.startServices(e.taskServiceID, serviceID); err != nil {
+		return nil, err
+	}
+	cancel, err := e.listen(stream)
 	if err != nil {
 		return nil, err
 	}
@@ -120,21 +123,21 @@ func (l *ResultListener) Execute(serviceID, task string) (*Stream, error) {
 	return stream, nil
 }
 
-func (l *ResultListener) listen(stream *Stream) (context.CancelFunc, error) {
+func (e *ResultEmitter) listen(stream *Stream) (context.CancelFunc, error) {
 	ctx, cancel := context.WithCancel(context.Background())
-	resp, err := l.app.client.ListenResult(ctx, &core.ListenResultRequest{
-		ServiceID:    l.resultServiceID,
-		TaskFilter:   l.resultTask,
-		OutputFilter: l.outputKey,
+	resp, err := e.app.client.ListenResult(ctx, &core.ListenResultRequest{
+		ServiceID:    e.resultServiceID,
+		TaskFilter:   e.resultTask,
+		OutputFilter: e.outputKey,
 	})
 	if err != nil {
 		return cancel, err
 	}
-	go l.readStream(stream, resp)
+	go e.readStream(stream, resp)
 	return cancel, nil
 }
 
-func (l *ResultListener) readStream(stream *Stream, resp core.Core_ListenResultClient) {
+func (e *ResultEmitter) readStream(stream *Stream, resp core.Core_ListenResultClient) {
 	for {
 		data, err := resp.Recv()
 		if err != nil {
@@ -147,31 +150,31 @@ func (l *ResultListener) readStream(stream *Stream, resp core.Core_ListenResultC
 			data:        data.OutputData,
 			executionID: data.ExecutionID,
 		}
-		go l.execute(stream, result)
+		go e.execute(stream, result)
 	}
 }
 
-func (l *ResultListener) execute(stream *Stream, result *Result) {
-	if l.filterFunc != nil && !l.filterFunc(result) {
-		return
-	}
-
-	var data Data
-	switch {
-	case l.mapData != nil:
-		data = l.mapData
-	case l.mapFunc != nil:
-		data = l.mapFunc(result)
-	default:
-		if err := result.Decode(&data); err != nil {
-			stream.Executions <- &Execution{
-				Err: err,
-			}
+func (e *ResultEmitter) execute(stream *Stream, result *Result) {
+	e.m.RLock()
+	for _, filterFunc := range e.filterFuncs {
+		if !filterFunc(result) {
+			e.m.RUnlock()
 			return
 		}
 	}
+	e.m.RUnlock()
 
-	executionID, err := l.app.Execute(l.taskServiceID, l.task, data)
+	var data Data
+	if e.mapFunc != nil {
+		data = e.mapFunc(result)
+	} else if err := result.Data(&data); err != nil {
+		stream.Executions <- &Execution{
+			Err: err,
+		}
+		return
+	}
+
+	executionID, err := e.app.execute(e.taskServiceID, e.task, data)
 	stream.Executions <- &Execution{
 		ID:  executionID,
 		Err: err,
