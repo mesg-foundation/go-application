@@ -39,7 +39,7 @@ type EventEmitter struct {
 	// if the task should be executed or not.
 	filterFuncs []func(*Event) bool
 
-	// provideFunc is a func that returns input data of task.
+	// mapFunc is a func that returns input data of task.
 	mapFunc func(*Event) Data
 
 	// m protects emitter configuration.
@@ -73,7 +73,11 @@ func (a *Application) WhenEvent(serviceID string, options ...EventOption) *Event
 	return e
 }
 
-// Filter expects the returned value to be true to do task execution.
+// Filter sets filter funcs that will be executed to decide to execute the
+// task or not.
+// It's possible to add multiple filters by calling Filter multiple times.
+// Other filter funcs and the task execution will no proceed if a filter
+// func returns false.
 func (e *EventEmitter) Filter(fn func(*Event) bool) *EventEmitter {
 	e.m.Lock()
 	defer e.m.Unlock()
@@ -93,7 +97,8 @@ func (e *EventEmitter) Map(fn func(*Event) Data) *Executor {
 	return newEventEmitterExecutor(e)
 }
 
-// Execute executes task on serviceID.
+// start starts for listening events and executes task on serviceID when
+// an event received and all Filter funcs returned true.
 func (e *EventEmitter) start(serviceID, task string) (*Stream, error) {
 	e.taskServiceID = serviceID
 	e.task = task
@@ -112,7 +117,7 @@ func (e *EventEmitter) start(serviceID, task string) (*Stream, error) {
 	return stream, nil
 }
 
-// Listen starts listening for events.
+// listen starts listening for events.
 func (e *EventEmitter) listen(stream *Stream) (context.CancelFunc, error) {
 	ctx, cancel := context.WithCancel(context.Background())
 	resp, err := e.app.client.ListenEvent(ctx, &core.ListenEventRequest{
@@ -126,6 +131,7 @@ func (e *EventEmitter) listen(stream *Stream) (context.CancelFunc, error) {
 	return cancel, nil
 }
 
+// readStream reads listen result stream.
 func (e *EventEmitter) readStream(stream *Stream, resp core.Core_ListenEventClient) {
 	for {
 		data, err := resp.Recv()
@@ -141,6 +147,8 @@ func (e *EventEmitter) readStream(stream *Stream, resp core.Core_ListenEventClie
 	}
 }
 
+// execute executes the task with data returned from Map if all filters
+// are met.
 func (e *EventEmitter) execute(stream *Stream, event *Event) {
 	e.m.RLock()
 	for _, filterFunc := range e.filterFuncs {

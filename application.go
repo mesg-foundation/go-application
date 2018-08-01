@@ -108,6 +108,7 @@ func (a *Application) execute(serviceID, task string, data Data) (executionID st
 	return resp.ExecutionID, nil
 }
 
+// startServices starts mesg services.
 func (a *Application) startServices(ids ...string) error {
 	idsLen := len(ids)
 	if idsLen == 0 {

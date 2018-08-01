@@ -87,7 +87,11 @@ func (a *Application) WhenResult(serviceID string, options ...ResultOption) *Res
 	return e
 }
 
-// Filter expects the returned value to be true to do task execution.
+// Filter sets filter funcs that will be executed to decide to execute the
+// task or not.
+// It's possible to add multiple filters by calling Filter multiple times.
+// Other filter funcs and the task execution will no proceed if a filter
+// func returns false.
 func (e *ResultEmitter) Filter(fn func(*Result) bool) *ResultEmitter {
 	e.m.Lock()
 	defer e.m.Unlock()
@@ -104,7 +108,8 @@ func (e *ResultEmitter) Map(fn func(*Result) Data) *Executor {
 	return newResultEmitterExecutor(e)
 }
 
-// Execute executes task on serviceID.
+// start starts for listening results and executes task on serviceID when
+// a result received and all Filter funcs returned true.
 func (e *ResultEmitter) start(serviceID, task string) (*Stream, error) {
 	e.taskServiceID = serviceID
 	e.task = task
@@ -123,6 +128,7 @@ func (e *ResultEmitter) start(serviceID, task string) (*Stream, error) {
 	return stream, nil
 }
 
+// listen starts listening for results.
 func (e *ResultEmitter) listen(stream *Stream) (context.CancelFunc, error) {
 	ctx, cancel := context.WithCancel(context.Background())
 	resp, err := e.app.client.ListenResult(ctx, &core.ListenResultRequest{
@@ -137,6 +143,7 @@ func (e *ResultEmitter) listen(stream *Stream) (context.CancelFunc, error) {
 	return cancel, nil
 }
 
+// readStream reads listen result stream.
 func (e *ResultEmitter) readStream(stream *Stream, resp core.Core_ListenResultClient) {
 	for {
 		data, err := resp.Recv()
@@ -154,6 +161,8 @@ func (e *ResultEmitter) readStream(stream *Stream, resp core.Core_ListenResultCl
 	}
 }
 
+// execute executes the task with data returned from Map if all filters
+// are met.
 func (e *ResultEmitter) execute(stream *Stream, result *Result) {
 	e.m.RLock()
 	for _, filterFunc := range e.filterFuncs {
