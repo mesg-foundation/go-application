@@ -101,22 +101,16 @@ func (e *ResultEmitter) Filter(fn func(*Result) bool) *ResultEmitter {
 
 // Map sets the returned data as the input data of task.
 // You can dynamically produce input values for task over result data.
-func (e *ResultEmitter) Map(fn func(*Result) Data) *Executor {
+func (e *ResultEmitter) Map(fn func(*Result) Data) Executor {
 	e.m.Lock()
 	defer e.m.Unlock()
 	e.mapFunc = fn
-	return newExecutor(e)
+	return e
 }
 
-// Execute executes task for serviceID on each received result.
-// Input data of task retrieved from the output data of result.
+// Execute starts for listening events and executes task for serviceID with the
+// output data of result or return value of Map if all Filter funcs returned as true.
 func (e *ResultEmitter) Execute(serviceID, task string) (*Stream, error) {
-	return newExecutor(e).Execute(serviceID, task)
-}
-
-// start starts for listening results and executes task on serviceID when
-// a result received and all Filter funcs returned true.
-func (e *ResultEmitter) start(serviceID, task string) (*Stream, error) {
 	e.taskServiceID = serviceID
 	e.task = task
 	stream := newStream()

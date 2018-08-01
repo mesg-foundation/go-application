@@ -85,27 +85,18 @@ func (e *EventEmitter) Filter(fn func(*Event) bool) *EventEmitter {
 	return e
 }
 
-// Data is piped as the input data to task.
-type Data interface{}
-
 // Map sets the returned data as the input data of task.
 // You can dynamically produce input values for task over event data.
-func (e *EventEmitter) Map(fn func(*Event) Data) *Executor {
+func (e *EventEmitter) Map(fn func(*Event) Data) Executor {
 	e.m.Lock()
 	defer e.m.Unlock()
 	e.mapFunc = fn
-	return newExecutor(e)
+	return e
 }
 
-// Execute executes task for serviceID on each received event.
-// Input data of task retrieved from the output data of event.
+// Execute starts for listening events and executes task for serviceID with the
+// output data of event or return value of Map if all Filter funcs returned as true.
 func (e *EventEmitter) Execute(serviceID, task string) (*Stream, error) {
-	return newExecutor(e).Execute(serviceID, task)
-}
-
-// start starts for listening events and executes task on serviceID when
-// an event received and all Filter funcs returned true.
-func (e *EventEmitter) start(serviceID, task string) (*Stream, error) {
 	e.taskServiceID = serviceID
 	e.task = task
 	stream := newStream()
