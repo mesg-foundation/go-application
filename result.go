@@ -48,7 +48,7 @@ type ResultEmitter struct {
 	mapFunc func(*Result) Data
 
 	// m protects emitter configuration.
-	m sync.RWMutex
+	m sync.Mutex
 
 	// cancel cancels listening for upcoming events.
 	cancel context.CancelFunc
@@ -119,10 +119,7 @@ func (e *ResultEmitter) Execute(serviceID, task string) (*Stream, error) {
 func (e *ResultEmitter) start(serviceID, task string) (*Stream, error) {
 	e.taskServiceID = serviceID
 	e.task = task
-	stream := &Stream{
-		Executions: make(chan *Execution, 0),
-		Err:        make(chan error, 0),
-	}
+	stream := newStream()
 	if err := e.app.startServices(e.taskServiceID, serviceID); err != nil {
 		return nil, err
 	}
@@ -154,7 +151,7 @@ func (e *ResultEmitter) readStream(stream *Stream, resp core.Core_ListenResultCl
 	for {
 		data, err := resp.Recv()
 		if err != nil {
-			stream.Err <- err
+			stream.sendError(err)
 			return
 		}
 		result := &Result{
@@ -170,28 +167,25 @@ func (e *ResultEmitter) readStream(stream *Stream, resp core.Core_ListenResultCl
 // execute executes the task with data returned from Map if all filters
 // are met.
 func (e *ResultEmitter) execute(stream *Stream, result *Result) {
-	e.m.RLock()
 	for _, filterFunc := range e.filterFuncs {
 		if !filterFunc(result) {
-			e.m.RUnlock()
 			return
 		}
 	}
-	e.m.RUnlock()
 
 	var data Data
 	if e.mapFunc != nil {
 		data = e.mapFunc(result)
 	} else if err := result.Data(&data); err != nil {
-		stream.Executions <- &Execution{
+		stream.sendExecution(&Execution{
 			Err: err,
-		}
+		})
 		return
 	}
 
 	executionID, err := e.app.execute(e.taskServiceID, e.task, data)
-	stream.Executions <- &Execution{
+	stream.sendExecution(&Execution{
 		ID:  executionID,
 		Err: err,
-	}
+	})
 }

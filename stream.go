@@ -22,6 +22,26 @@ type Stream struct {
 	cancel context.CancelFunc
 }
 
+func newStream() *Stream {
+	return &Stream{
+		// lets make sure to not miss any Execution on the readers side
+		// while initializing by making Executions chan buffered.
+		Executions: make(chan *Execution, 100),
+		Err:        make(chan error, 0),
+	}
+}
+
+func (s *Stream) sendExecution(execution *Execution) {
+	select {
+	case s.Executions <- execution:
+	default:
+	}
+}
+
+func (s *Stream) sendError(err error) {
+	s.Err <- err
+}
+
 // Close gracefully stops listening for events and shutdowns stream.
 func (s *Stream) Close() error {
 	s.cancel()
