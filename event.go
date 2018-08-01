@@ -94,7 +94,7 @@ func (e *EventEmitter) Map(fn func(*Event) Data) *Executor {
 	e.m.Lock()
 	defer e.m.Unlock()
 	e.mapFunc = fn
-	return newEventEmitterExecutor(e)
+	return newExecutor(e)
 }
 
 // start starts for listening events and executes task on serviceID when

@@ -105,7 +105,7 @@ func (e *ResultEmitter) Map(fn func(*Result) Data) *Executor {
 	e.m.Lock()
 	defer e.m.Unlock()
 	e.mapFunc = fn
-	return newResultEmitterExecutor(e)
+	return newExecutor(e)
 }
 
 // start starts for listening results and executes task on serviceID when
