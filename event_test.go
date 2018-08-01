@@ -130,7 +130,7 @@ type eventData struct {
 	URL string `json:"url"`
 }
 
-func TestWhenEventExecute(t *testing.T) {
+func TestWhenEventMapExecute(t *testing.T) {
 	eventServiceID := "1"
 	taskServiceID := "2"
 	task := "3"
@@ -207,6 +207,47 @@ func TestWhenEventClose(t *testing.T) {
 
 	stream.Close()
 	assert.NotNil(t, <-stream.Err)
+}
+
+func TestWhenEventExecute(t *testing.T) {
+	eventServiceID := "1"
+	taskServiceID := "2"
+	task := "3"
+	event := "4"
+	evData := eventData{"https://mesg.com"}
+
+	app, server := newApplicationAndServer(t)
+	go server.Start()
+
+	var wg sync.WaitGroup
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+
+		e := server.LastExecute()
+		assert.Equal(t, taskServiceID, e.ServiceID())
+		assert.Equal(t, task, e.Task())
+
+		var data taskRequest
+		assert.Nil(t, e.Data(&data))
+		assert.Equal(t, evData.URL, data.URL)
+	}()
+
+	stream, err := app.
+		WhenEvent(eventServiceID).
+		Execute(taskServiceID, task)
+
+	assert.Nil(t, err)
+	assert.NotNil(t, stream)
+
+	go server.EmitEvent(eventServiceID, event, evData)
+
+	execution := <-stream.Executions
+	assert.Nil(t, execution.Err)
+	assert.True(t, execution.ID != "")
+
+	wg.Wait()
 }
 
 func stringSliceContains(s []string, e string) bool {

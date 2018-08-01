@@ -14,8 +14,8 @@ func newExecutor(s starter) *Executor {
 	return &Executor{starter: s}
 }
 
-// Execute executes tasks on event or results for serviceID.
-// Input Data of task retrieved from the return value of Map func of emitter.
+// Execute executes tasks on events or results for serviceID.
+// Input data of task retrieved from the return value of Map func of emitter.
 func (e *Executor) Execute(serviceID, task string) (*Stream, error) {
 	return e.starter.start(serviceID, task)
 }

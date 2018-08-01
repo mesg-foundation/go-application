@@ -97,6 +97,12 @@ func (e *EventEmitter) Map(fn func(*Event) Data) *Executor {
 	return newExecutor(e)
 }
 
+// Execute executes task for serviceID on each received event.
+// Input data of task retrieved from the output data of event.
+func (e *EventEmitter) Execute(serviceID, task string) (*Stream, error) {
+	return newExecutor(e).Execute(serviceID, task)
+}
+
 // start starts for listening events and executes task on serviceID when
 // an event received and all Filter funcs returned true.
 func (e *EventEmitter) start(serviceID, task string) (*Stream, error) {

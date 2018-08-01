@@ -108,6 +108,12 @@ func (e *ResultEmitter) Map(fn func(*Result) Data) *Executor {
 	return newExecutor(e)
 }
 
+// Execute executes task for serviceID on each received result.
+// Input data of task retrieved from the output data of result.
+func (e *ResultEmitter) Execute(serviceID, task string) (*Stream, error) {
+	return newExecutor(e).Execute(serviceID, task)
+}
+
 // start starts for listening results and executes task on serviceID when
 // a result received and all Filter funcs returned true.
 func (e *ResultEmitter) start(serviceID, task string) (*Stream, error) {
