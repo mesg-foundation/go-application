@@ -18,9 +18,9 @@ type QuickStart struct {
 
 	config Config
 
-	// streams holds MESG's application streams
-	streams []*mesg.Stream
-	errC    chan error
+	// listeners holds MESG's application listeners
+	listeners []*mesg.Listener
+	errC      chan error
 
 	log       *log.Logger
 	logOutput io.Writer
@@ -67,12 +67,12 @@ func (q *QuickStart) Start() error {
 	return q.wait()
 }
 
-func (q *QuickStart) monitor(stream *mesg.Stream, err error) {
+func (q *QuickStart) monitor(listener *mesg.Listener, err error) {
 	if err != nil {
 		q.errC <- err
 		return
 	}
-	q.streams = append(q.streams, stream)
+	q.listeners = append(q.listeners, listener)
 }
 
 func (q *QuickStart) wait() error {
@@ -84,24 +84,18 @@ func (q *QuickStart) wait() error {
 
 	errC := make(chan error, 0)
 
-	for _, stream := range q.streams {
-		go q.monitorStream(stream, errC)
+	for _, listener := range q.listeners {
+		go q.monitorListener(listener, errC)
 	}
 
 	return <-errC
 }
 
-func (q *QuickStart) monitorStream(stream *mesg.Stream, errC chan error) {
+func (q *QuickStart) monitorListener(listener *mesg.Listener, errC chan error) {
 	for {
 		select {
-		case err := <-stream.Err:
-			errC <- err
+		case errC <- <-listener.Err:
 			return
-
-		case execution := <-stream.Executions:
-			if execution.Err != nil {
-				q.log.Println(execution.Err)
-			}
 		}
 	}
 }

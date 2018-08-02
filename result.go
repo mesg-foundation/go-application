@@ -3,10 +3,13 @@ package mesg
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"sync"
 
 	"github.com/mesg-foundation/core/api/core"
 )
+
+var errCannotDecodeResultData = errors.New("cannot decode result data")
 
 // Result is MESG result event.
 type Result struct {
@@ -110,23 +113,23 @@ func (e *ResultEmitter) Map(fn func(*Result) Data) Executor {
 
 // Execute starts for listening events and executes task for serviceID with the
 // output data of result or return value of Map if all Filter funcs returned as true.
-func (e *ResultEmitter) Execute(serviceID, task string) (*Stream, error) {
+func (e *ResultEmitter) Execute(serviceID, task string) (*Listener, error) {
 	e.taskServiceID = serviceID
 	e.task = task
-	stream := newStream()
+	listener := newListener()
 	if err := e.app.startServices(e.taskServiceID, serviceID); err != nil {
 		return nil, err
 	}
-	cancel, err := e.listen(stream)
+	cancel, err := e.listen(listener)
 	if err != nil {
 		return nil, err
 	}
-	stream.cancel = cancel
-	return stream, nil
+	listener.cancel = cancel
+	return listener, nil
 }
 
 // listen starts listening for results.
-func (e *ResultEmitter) listen(stream *Stream) (context.CancelFunc, error) {
+func (e *ResultEmitter) listen(listener *Listener) (context.CancelFunc, error) {
 	ctx, cancel := context.WithCancel(context.Background())
 	resp, err := e.app.client.ListenResult(ctx, &core.ListenResultRequest{
 		ServiceID:    e.resultServiceID,
@@ -136,16 +139,16 @@ func (e *ResultEmitter) listen(stream *Stream) (context.CancelFunc, error) {
 	if err != nil {
 		return cancel, err
 	}
-	go e.readStream(stream, resp)
+	go e.readStream(listener, resp)
 	return cancel, nil
 }
 
 // readStream reads listen result stream.
-func (e *ResultEmitter) readStream(stream *Stream, resp core.Core_ListenResultClient) {
+func (e *ResultEmitter) readStream(listener *Listener, resp core.Core_ListenResultClient) {
 	for {
 		data, err := resp.Recv()
 		if err != nil {
-			stream.sendError(err)
+			listener.sendError(err)
 			return
 		}
 		result := &Result{
@@ -154,13 +157,13 @@ func (e *ResultEmitter) readStream(stream *Stream, resp core.Core_ListenResultCl
 			data:        data.OutputData,
 			executionID: data.ExecutionID,
 		}
-		go e.execute(stream, result)
+		go e.execute(listener, result)
 	}
 }
 
 // execute executes the task with data returned from Map if all filters
 // are met.
-func (e *ResultEmitter) execute(stream *Stream, result *Result) {
+func (e *ResultEmitter) execute(listener *Listener, result *Result) {
 	for _, filterFunc := range e.filterFuncs {
 		if !filterFunc(result) {
 			return
@@ -171,15 +174,11 @@ func (e *ResultEmitter) execute(stream *Stream, result *Result) {
 	if e.mapFunc != nil {
 		data = e.mapFunc(result)
 	} else if err := result.Data(&data); err != nil {
-		stream.sendExecution(&Execution{
-			Err: err,
-		})
+		e.app.log.Println(errCannotDecodeResultData)
 		return
 	}
 
-	executionID, err := e.app.execute(e.taskServiceID, e.task, data)
-	stream.sendExecution(&Execution{
-		ID:  executionID,
-		Err: err,
-	})
+	if _, err := e.app.execute(e.taskServiceID, e.task, data); err != nil {
+		e.app.log.Println(executionError{e.task, err})
+	}
 }

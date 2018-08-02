@@ -23,14 +23,14 @@ func TestWhenEvent(t *testing.T) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		stream, err := app.
+		listener, err := app.
 			WhenEvent(eventServiceID).
 			Map(func(*Event) Data {
 				return taskData
 			}).
 			Execute(taskServiceID, task)
 		assert.Nil(t, err)
-		assert.NotNil(t, stream)
+		assert.NotNil(t, listener)
 	}()
 
 	el := server.LastEventListen()
@@ -55,14 +55,14 @@ func TestWhenEventWithEventFilter(t *testing.T) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		stream, err := app.
+		listener, err := app.
 			WhenEvent(eventServiceID, EventFilterOption(event)).
 			Map(func(*Event) Data {
 				return taskData
 			}).
 			Execute(taskServiceID, task)
 		assert.Nil(t, err)
-		assert.NotNil(t, stream)
+		assert.NotNil(t, listener)
 	}()
 
 	el := server.LastEventListen()
@@ -113,13 +113,13 @@ func TestWhenEventServiceStartError(t *testing.T) {
 	go server.Start()
 	server.MarkServiceAsNonExistent(taskServiceID)
 
-	stream, err := app.WhenEvent(eventServiceID).
+	listener, err := app.WhenEvent(eventServiceID).
 		Map(func(*Event) Data {
 			return taskData
 		}).
 		Execute(taskServiceID, task)
 	assert.NotNil(t, err)
-	assert.Nil(t, stream)
+	assert.Nil(t, listener)
 }
 
 type taskRequest struct {
@@ -157,7 +157,7 @@ func TestWhenEventMapExecute(t *testing.T) {
 	}()
 
 	wg.Add(1)
-	stream, err := app.
+	listener, err := app.
 		WhenEvent(eventServiceID).
 		Filter(func(event *Event) bool {
 			defer wg.Done()
@@ -172,13 +172,9 @@ func TestWhenEventMapExecute(t *testing.T) {
 		Execute(taskServiceID, task)
 
 	assert.Nil(t, err)
-	assert.NotNil(t, stream)
+	assert.NotNil(t, listener)
 
 	go server.EmitEvent(eventServiceID, event, evData)
-
-	execution := <-stream.Executions
-	assert.Nil(t, execution.Err)
-	assert.True(t, execution.ID != "")
 
 	wg.Wait()
 }
@@ -195,7 +191,7 @@ func TestWhenEventClose(t *testing.T) {
 	go server.Start()
 	go server.EmitEvent(eventServiceID, event, evData)
 
-	stream, err := app.
+	listener, err := app.
 		WhenEvent(eventServiceID).
 		Map(func(*Event) Data {
 			return taskData
@@ -203,10 +199,10 @@ func TestWhenEventClose(t *testing.T) {
 		Execute(taskServiceID, task)
 
 	assert.Nil(t, err)
-	assert.NotNil(t, stream)
+	assert.NotNil(t, listener)
 
-	stream.Close()
-	assert.NotNil(t, <-stream.Err)
+	listener.Close()
+	assert.NotNil(t, <-listener.Err)
 }
 
 func TestWhenEventExecute(t *testing.T) {
@@ -234,18 +230,14 @@ func TestWhenEventExecute(t *testing.T) {
 		assert.Equal(t, evData.URL, data.URL)
 	}()
 
-	stream, err := app.
+	listener, err := app.
 		WhenEvent(eventServiceID).
 		Execute(taskServiceID, task)
 
 	assert.Nil(t, err)
-	assert.NotNil(t, stream)
+	assert.NotNil(t, listener)
 
 	go server.EmitEvent(eventServiceID, event, evData)
-
-	execution := <-stream.Executions
-	assert.Nil(t, execution.Err)
-	assert.True(t, execution.ID != "")
 
 	wg.Wait()
 }

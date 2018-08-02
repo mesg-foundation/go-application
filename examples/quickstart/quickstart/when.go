@@ -2,7 +2,7 @@ package quickstart
 
 import mesg "github.com/mesg-foundation/go-application"
 
-func (q *QuickStart) whenRequest() (*mesg.Stream, error) {
+func (q *QuickStart) whenRequest() (*mesg.Listener, error) {
 	return q.app.
 		WhenEvent(q.config.WebhookServiceID, mesg.EventFilterOption("request")).
 		Map(func(*mesg.Event) mesg.Data {
@@ -14,7 +14,7 @@ func (q *QuickStart) whenRequest() (*mesg.Stream, error) {
 		Execute(q.config.DiscordInvServiceID, "send")
 }
 
-func (q *QuickStart) whenDiscordSend() (*mesg.Stream, error) {
+func (q *QuickStart) whenDiscordSend() (*mesg.Listener, error) {
 	return q.app.
 		WhenResult(q.config.DiscordInvServiceID, mesg.TaskFilterOption("send")).
 		Filter(func(r *mesg.Result) bool {
