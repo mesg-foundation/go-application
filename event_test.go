@@ -56,7 +56,7 @@ func TestWhenEventWithEventFilter(t *testing.T) {
 	go func() {
 		defer wg.Done()
 		listener, err := app.
-			WhenEvent(eventServiceID, EventFilterOption(event)).
+			WhenEvent(eventServiceID, EventKeyCondition(event)).
 			Map(func(*Event) Data {
 				return taskData
 			}).

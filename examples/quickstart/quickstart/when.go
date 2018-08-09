@@ -4,7 +4,7 @@ import mesg "github.com/mesg-foundation/go-application"
 
 func (q *QuickStart) whenRequest() (*mesg.Listener, error) {
 	return q.app.
-		WhenEvent(q.config.WebhookServiceID, mesg.EventFilterOption("request")).
+		WhenEvent(q.config.WebhookServiceID, mesg.EventKeyCondition("request")).
 		Map(func(*mesg.Event) mesg.Data {
 			return sendgridRequest{
 				Email:          q.config.Email,
@@ -16,7 +16,7 @@ func (q *QuickStart) whenRequest() (*mesg.Listener, error) {
 
 func (q *QuickStart) whenDiscordSend() (*mesg.Listener, error) {
 	return q.app.
-		WhenResult(q.config.DiscordInvServiceID, mesg.TaskFilterOption("send")).
+		WhenResult(q.config.DiscordInvServiceID, mesg.TaskKeyCondition("send")).
 		Filter(func(r *mesg.Result) bool {
 			var resp interface{}
 			return r.Data(&resp) == nil

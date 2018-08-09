@@ -15,5 +15,5 @@ type executionError struct {
 }
 
 func (e executionError) Error() string {
-	return fmt.Sprintf("task `%s` execution complated with an error: %s", e.task, e.err)
+	return fmt.Sprintf("task %q execution completed with an error: %s", e.task, e.err)
 }

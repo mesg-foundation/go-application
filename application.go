@@ -115,7 +115,7 @@ func (a *Application) startServices(ids ...string) error {
 		return nil
 	}
 
-	errC := make(chan error, 0)
+	errC := make(chan error, idsLen)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 

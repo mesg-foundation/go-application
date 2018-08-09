@@ -3,13 +3,11 @@ package mesg
 import (
 	"context"
 	"encoding/json"
-	"errors"
+	"fmt"
 	"sync"
 
 	"github.com/mesg-foundation/core/api/core"
 )
-
-var errCannotDecodeEventData = errors.New("cannot decode event data")
 
 // Event is a MESG event.
 type Event struct {
@@ -26,14 +24,14 @@ func (e *Event) Data(out interface{}) error {
 type EventEmitter struct {
 	app *Application
 
-	// event is the actual event to listen for.
-	event string
+	// eventKey is the actual event to listen for.
+	eventKey string
 
 	//eventServiceID is the service id of where event is emitted.
 	eventServiceID string
 
-	// task is the actual task that will be executed.
-	task string
+	// taskKey is the actual task that will be executed.
+	taskKey string
 
 	// taskServiceID is the service id of target task.
 	taskServiceID string
@@ -52,26 +50,26 @@ type EventEmitter struct {
 	cancel context.CancelFunc
 }
 
-// EventOption is the configuration func of EventListener.
-type EventOption func(*EventEmitter)
+// EventCondition is the condition configurator for filtering events.
+type EventCondition func(*EventEmitter)
 
-// EventFilterOption returns a new option to filter events by name.
+// EventKeyCondition returns a new condition to filter events by name.
 // Default is all(*).
-func EventFilterOption(event string) EventOption {
+func EventKeyCondition(event string) EventCondition {
 	return func(l *EventEmitter) {
-		l.event = event
+		l.eventKey = event
 	}
 }
 
-// WhenEvent creates an EventListener for serviceID.
-func (a *Application) WhenEvent(serviceID string, options ...EventOption) *EventEmitter {
+// WhenEvent creates an EventEmitter for serviceID.
+func (a *Application) WhenEvent(serviceID string, conditions ...EventCondition) *EventEmitter {
 	e := &EventEmitter{
 		app:            a,
 		eventServiceID: serviceID,
-		event:          "*",
+		eventKey:       "*",
 	}
-	for _, option := range options {
-		option(e)
+	for _, condition := range conditions {
+		condition(e)
 	}
 	return e
 }
@@ -101,7 +99,7 @@ func (e *EventEmitter) Map(fn func(*Event) Data) Executor {
 // output data of event or return value of Map if all Filter funcs returned as true.
 func (e *EventEmitter) Execute(serviceID, task string) (*Listener, error) {
 	e.taskServiceID = serviceID
-	e.task = task
+	e.taskKey = task
 	listener := newListener()
 	if err := e.app.startServices(e.eventServiceID, serviceID); err != nil {
 		return nil, err
@@ -119,7 +117,7 @@ func (e *EventEmitter) listen(listener *Listener) (context.CancelFunc, error) {
 	ctx, cancel := context.WithCancel(context.Background())
 	resp, err := e.app.client.ListenEvent(ctx, &core.ListenEventRequest{
 		ServiceID:   e.eventServiceID,
-		EventFilter: e.event,
+		EventFilter: e.eventKey,
 	})
 	if err != nil {
 		return cancel, err
@@ -157,11 +155,19 @@ func (e *EventEmitter) execute(listener *Listener, event *Event) {
 	if e.mapFunc != nil {
 		data = e.mapFunc(event)
 	} else if err := event.Data(&data); err != nil {
-		e.app.log.Println(errCannotDecodeEventData)
+		e.app.log.Println(errDecodingEventData{err})
 		return
 	}
 
-	if _, err := e.app.execute(e.taskServiceID, e.task, data); err != nil {
-		e.app.log.Println(executionError{e.task, err})
+	if _, err := e.app.execute(e.taskServiceID, e.taskKey, data); err != nil {
+		e.app.log.Println(executionError{e.taskKey, err})
 	}
+}
+
+type errDecodingEventData struct {
+	err error
+}
+
+func (e errDecodingEventData) Error() string {
+	return fmt.Sprintf("cannot decode event data err: %s", e.err)
 }

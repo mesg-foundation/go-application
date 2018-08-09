@@ -3,13 +3,11 @@ package mesg
 import (
 	"context"
 	"encoding/json"
-	"errors"
+	"fmt"
 	"sync"
 
 	"github.com/mesg-foundation/core/api/core"
 )
-
-var errCannotDecodeResultData = errors.New("cannot decode result data")
 
 // Result is MESG result event.
 type Result struct {
@@ -37,8 +35,8 @@ type ResultEmitter struct {
 	// outputKey is the output key to listen for.
 	outputKey string
 
-	// task is the actual task that will be executed.
-	task string
+	// taskKey is the actual task that will be executed.
+	taskKey string
 
 	// taskServiceID is the service id of target task.
 	taskServiceID string
@@ -57,35 +55,35 @@ type ResultEmitter struct {
 	cancel context.CancelFunc
 }
 
-// ResultOption is the configuration func of ResultEmitter.
-type ResultOption func(*ResultEmitter)
+// ResultCondition is the condition configurator for filtering results.
+type ResultCondition func(*ResultEmitter)
 
-// TaskFilterOption returns a new option to filter results by task name.
+// TaskKeyCondition returns a new option to filter results by task name.
 // Default is all(*).
-func TaskFilterOption(task string) ResultOption {
+func TaskKeyCondition(task string) ResultCondition {
 	return func(l *ResultEmitter) {
 		l.resultTask = task
 	}
 }
 
-// OutputKeyFilterOption returns a new option to filter results by output key name.
+// OutputKeyCondition returns a new option to filter results by output key name.
 // Default is all(*).
-func OutputKeyFilterOption(key string) ResultOption {
+func OutputKeyCondition(key string) ResultCondition {
 	return func(l *ResultEmitter) {
 		l.outputKey = key
 	}
 }
 
 // WhenResult creates a ResultEmitter for serviceID.
-func (a *Application) WhenResult(serviceID string, options ...ResultOption) *ResultEmitter {
+func (a *Application) WhenResult(serviceID string, conditions ...ResultCondition) *ResultEmitter {
 	e := &ResultEmitter{
 		app:             a,
 		resultServiceID: serviceID,
 		resultTask:      "*",
 		outputKey:       "*",
 	}
-	for _, option := range options {
-		option(e)
+	for _, condition := range conditions {
+		condition(e)
 	}
 	return e
 }
@@ -115,7 +113,7 @@ func (e *ResultEmitter) Map(fn func(*Result) Data) Executor {
 // output data of result or return value of Map if all Filter funcs returned as true.
 func (e *ResultEmitter) Execute(serviceID, task string) (*Listener, error) {
 	e.taskServiceID = serviceID
-	e.task = task
+	e.taskKey = task
 	listener := newListener()
 	if err := e.app.startServices(e.taskServiceID, serviceID); err != nil {
 		return nil, err
@@ -174,11 +172,19 @@ func (e *ResultEmitter) execute(listener *Listener, result *Result) {
 	if e.mapFunc != nil {
 		data = e.mapFunc(result)
 	} else if err := result.Data(&data); err != nil {
-		e.app.log.Println(errCannotDecodeResultData)
+		e.app.log.Println(errDecodingResultData{err})
 		return
 	}
 
-	if _, err := e.app.execute(e.taskServiceID, e.task, data); err != nil {
-		e.app.log.Println(executionError{e.task, err})
+	if _, err := e.app.execute(e.taskServiceID, e.taskKey, data); err != nil {
+		e.app.log.Println(executionError{e.taskKey, err})
 	}
+}
+
+type errDecodingResultData struct {
+	err error
+}
+
+func (e errDecodingResultData) Error() string {
+	return fmt.Sprintf("cannot decode result data err: %s", e.err)
 }
