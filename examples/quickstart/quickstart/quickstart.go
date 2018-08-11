@@ -21,6 +21,7 @@ type QuickStart struct {
 	// listeners holds MESG's application listeners
 	listeners []*mesg.Listener
 	errC      chan error
+	isClosed  bool
 
 	log       *log.Logger
 	logOutput io.Writer
@@ -40,7 +41,7 @@ func New(app *mesg.Application, config Config, options ...Option) *QuickStart {
 	q := &QuickStart{
 		app:       app,
 		config:    config,
-		errC:      make(chan error, 0),
+		errC:      make(chan error, 1),
 		logOutput: os.Stdout,
 	}
 	for _, option := range options {
@@ -68,7 +69,11 @@ func (q *QuickStart) Start() error {
 }
 
 func (q *QuickStart) monitor(listener *mesg.Listener, err error) {
+	if q.isClosed {
+		return
+	}
 	if err != nil {
+		q.isClosed = true
 		q.errC <- err
 		return
 	}
@@ -82,13 +87,20 @@ func (q *QuickStart) wait() error {
 	default:
 	}
 
-	errC := make(chan error, 0)
+	listenersLen := len(q.listeners)
+	errC := make(chan error, listenersLen)
 
 	for _, listener := range q.listeners {
 		go q.monitorListener(listener, errC)
 	}
 
-	return <-errC
+	for i := 0; i < listenersLen; i++ {
+		if err := <-errC; err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
 
 func (q *QuickStart) monitorListener(listener *mesg.Listener, errC chan error) {

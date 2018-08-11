@@ -18,7 +18,10 @@ func (q *QuickStart) whenDiscordSend() (*mesg.Listener, error) {
 	return q.app.
 		WhenResult(q.config.DiscordInvServiceID, mesg.TaskKeyCondition("send")).
 		Filter(func(r *mesg.Result) bool {
-			var resp interface{}
+			// we don't necessarily need to use a map here instead of using an interface{}.
+			// this is just done to demonstrate to avoid task execution for
+			// TestWhenResultFalseFilter test.
+			var resp map[string]interface{}
 			return r.Data(&resp) == nil
 		}).
 		Map(func(r *mesg.Result) mesg.Data {

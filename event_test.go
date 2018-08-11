@@ -18,26 +18,19 @@ func TestWhenEvent(t *testing.T) {
 	app, server := newApplicationAndServer(t)
 	go server.Start()
 
-	var wg sync.WaitGroup
+	listener, err := app.
+		WhenEvent(eventServiceID).
+		Map(func(*Event) Data {
+			return taskData
+		}).
+		Execute(taskServiceID, task)
 
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		listener, err := app.
-			WhenEvent(eventServiceID).
-			Map(func(*Event) Data {
-				return taskData
-			}).
-			Execute(taskServiceID, task)
-		assert.Nil(t, err)
-		assert.NotNil(t, listener)
-	}()
+	assert.Nil(t, err)
+	assert.NotNil(t, listener)
 
-	el := server.LastEventListen()
-	assert.Equal(t, eventServiceID, el.ServiceID())
-	assert.Equal(t, "*", el.EventFilter())
-
-	wg.Wait()
+	ll := <-server.LastEventListen()
+	assert.Equal(t, eventServiceID, ll.ServiceID())
+	assert.Equal(t, "*", ll.EventFilter())
 }
 
 func TestWhenEventWithEventFilter(t *testing.T) {
@@ -50,26 +43,19 @@ func TestWhenEventWithEventFilter(t *testing.T) {
 	app, server := newApplicationAndServer(t)
 	go server.Start()
 
-	var wg sync.WaitGroup
+	listener, err := app.
+		WhenEvent(eventServiceID, EventKeyCondition(event)).
+		Map(func(*Event) Data {
+			return taskData
+		}).
+		Execute(taskServiceID, task)
 
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		listener, err := app.
-			WhenEvent(eventServiceID, EventKeyCondition(event)).
-			Map(func(*Event) Data {
-				return taskData
-			}).
-			Execute(taskServiceID, task)
-		assert.Nil(t, err)
-		assert.NotNil(t, listener)
-	}()
+	assert.Nil(t, err)
+	assert.NotNil(t, listener)
 
-	el := server.LastEventListen()
-	assert.Equal(t, eventServiceID, el.ServiceID())
-	assert.Equal(t, event, el.EventFilter())
-
-	wg.Wait()
+	ll := <-server.LastEventListen()
+	assert.Equal(t, eventServiceID, ll.ServiceID())
+	assert.Equal(t, event, ll.EventFilter())
 }
 
 func TestWhenEventServiceStart(t *testing.T) {
@@ -81,27 +67,19 @@ func TestWhenEventServiceStart(t *testing.T) {
 	app, server := newApplicationAndServer(t)
 	go server.Start()
 
-	var wg sync.WaitGroup
-
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		lastStartIDs := []string{
-			server.LastServiceStart().ServiceID(),
-			server.LastServiceStart().ServiceID(),
-		}
-
-		assert.True(t, stringSliceContains(lastStartIDs, eventServiceID))
-		assert.True(t, stringSliceContains(lastStartIDs, taskServiceID))
-	}()
-
 	app.WhenEvent(eventServiceID).
 		Map(func(*Event) Data {
 			return taskData
 		}).
 		Execute(taskServiceID, task)
 
-	wg.Wait()
+	lastStartIDs := []string{
+		(<-server.LastServiceStart()).ServiceID(),
+		(<-server.LastServiceStart()).ServiceID(),
+	}
+
+	assert.True(t, stringSliceContains(lastStartIDs, eventServiceID))
+	assert.True(t, stringSliceContains(lastStartIDs, taskServiceID))
 }
 func TestWhenEventServiceStartError(t *testing.T) {
 	eventServiceID := "1"
@@ -110,6 +88,7 @@ func TestWhenEventServiceStartError(t *testing.T) {
 	task := "3"
 
 	app, server := newApplicationAndServer(t)
+
 	go server.Start()
 	server.MarkServiceAsNonExistent(taskServiceID)
 
@@ -118,6 +97,7 @@ func TestWhenEventServiceStartError(t *testing.T) {
 			return taskData
 		}).
 		Execute(taskServiceID, task)
+
 	assert.NotNil(t, err)
 	assert.Nil(t, listener)
 }
@@ -143,30 +123,21 @@ func TestWhenEventMapExecute(t *testing.T) {
 
 	var wg sync.WaitGroup
 
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Add(2)
 
-		e := server.LastExecute()
-		assert.Equal(t, taskServiceID, e.ServiceID())
-		assert.Equal(t, task, e.Task())
-
-		var data taskRequest
-		assert.Nil(t, e.Data(&data))
-		assert.Equal(t, reqData.URL, data.URL)
-	}()
-
-	wg.Add(1)
 	listener, err := app.
 		WhenEvent(eventServiceID).
 		Filter(func(event *Event) bool {
 			defer wg.Done()
+
 			var data eventData
 			assert.Nil(t, event.Data(&data))
 			assert.Equal(t, evData.URL, data.URL)
+
 			return true
 		}).
 		Map(func(*Event) Data {
+			wg.Done()
 			return reqData
 		}).
 		Execute(taskServiceID, task)
@@ -174,7 +145,16 @@ func TestWhenEventMapExecute(t *testing.T) {
 	assert.Nil(t, err)
 	assert.NotNil(t, listener)
 
-	go server.EmitEvent(eventServiceID, event, evData)
+	server.EmitEvent(eventServiceID, event, evData)
+
+	le := <-server.LastExecute()
+
+	assert.Equal(t, taskServiceID, le.ServiceID())
+	assert.Equal(t, task, le.Task())
+
+	var data taskRequest
+	assert.Nil(t, le.Data(&data))
+	assert.Equal(t, reqData.URL, data.URL)
 
 	wg.Wait()
 }
@@ -189,7 +169,6 @@ func TestWhenEventClose(t *testing.T) {
 
 	app, server := newApplicationAndServer(t)
 	go server.Start()
-	go server.EmitEvent(eventServiceID, event, evData)
 
 	listener, err := app.
 		WhenEvent(eventServiceID).
@@ -200,6 +179,8 @@ func TestWhenEventClose(t *testing.T) {
 
 	assert.Nil(t, err)
 	assert.NotNil(t, listener)
+
+	server.EmitEvent(eventServiceID, event, evData)
 
 	listener.Close()
 	assert.NotNil(t, <-listener.Err)
@@ -215,21 +196,6 @@ func TestWhenEventExecute(t *testing.T) {
 	app, server := newApplicationAndServer(t)
 	go server.Start()
 
-	var wg sync.WaitGroup
-
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-
-		e := server.LastExecute()
-		assert.Equal(t, taskServiceID, e.ServiceID())
-		assert.Equal(t, task, e.Task())
-
-		var data taskRequest
-		assert.Nil(t, e.Data(&data))
-		assert.Equal(t, evData.URL, data.URL)
-	}()
-
 	listener, err := app.
 		WhenEvent(eventServiceID).
 		Execute(taskServiceID, task)
@@ -237,9 +203,16 @@ func TestWhenEventExecute(t *testing.T) {
 	assert.Nil(t, err)
 	assert.NotNil(t, listener)
 
-	go server.EmitEvent(eventServiceID, event, evData)
+	server.EmitEvent(eventServiceID, event, evData)
 
-	wg.Wait()
+	le := <-server.LastExecute()
+
+	assert.Equal(t, taskServiceID, le.ServiceID())
+	assert.Equal(t, task, le.Task())
+
+	var data taskRequest
+	assert.Nil(t, le.Data(&data))
+	assert.Equal(t, evData.URL, data.URL)
 }
 
 func stringSliceContains(s []string, e string) bool {

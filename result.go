@@ -150,10 +150,9 @@ func (e *ResultEmitter) readStream(listener *Listener, resp core.Core_ListenResu
 			return
 		}
 		result := &Result{
-			TaskKey:     data.TaskKey,
-			OutputKey:   data.OutputKey,
-			data:        data.OutputData,
-			executionID: data.ExecutionID,
+			TaskKey:   data.TaskKey,
+			OutputKey: data.OutputKey,
+			data:      data.OutputData,
 		}
 		go e.execute(listener, result)
 	}

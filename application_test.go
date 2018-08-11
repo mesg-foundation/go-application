@@ -37,7 +37,8 @@ func TestExecute(t *testing.T) {
 	go func() {
 		defer wg.Done()
 
-		execution := server.LastExecute()
+		execution := <-server.LastExecute()
+
 		assert.Equal(t, serviceID, execution.ServiceID())
 		assert.Equal(t, task, execution.Task())
 

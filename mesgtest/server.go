@@ -27,31 +27,37 @@ func (s *Server) Start() error {
 	return s.socket.listen(s.core)
 }
 
+// Close closes test server.
+func (s *Server) Close() error {
+	return s.socket.close()
+}
+
 // Socket returns a in-memory socket for client application.
 func (s *Server) Socket() *Socket {
 	return s.socket
 }
 
-// LastServiceStart returns the last service start request's info.
-func (s *Server) LastServiceStart() *ServiceStart {
-	req := <-s.core.serviceStartC
-	return &ServiceStart{
-		serviceID: req.ServiceID,
-	}
+// LastServiceStart returns the chan that receives last service start request's info.
+func (s *Server) LastServiceStart() <-chan *ServiceStart {
+	return s.core.serviceStartC
 }
 
-// LastEventListen returns the last event listen request's info.
-func (s *Server) LastEventListen() *EventListen {
-	for {
-		select {
-		case <-s.core.serviceStartC:
-		case req := <-s.core.listenEventC:
-			return &EventListen{
-				serviceID: req.ServiceID,
-				event:     req.EventFilter,
-			}
-		}
-	}
+// LastEventListen returns the chan that receives last event listen request's info.
+func (s *Server) LastEventListen() <-chan *EventListen {
+	s.flushServiceStarts()
+	return s.core.listenEventC
+}
+
+// LastResultListen returns the chan that receives last result listen request's info.
+func (s *Server) LastResultListen() <-chan *ResultListen {
+	s.flushServiceStarts()
+	return s.core.listenResultC
+}
+
+// LastExecute returns the chan that receives last task execution's info.
+func (s *Server) LastExecute() <-chan *Execute {
+	s.flushServiceStarts()
+	return s.core.executeC
 }
 
 // EmitEvent emits a new event for serviceID with given data.
@@ -69,27 +75,12 @@ func (s *Server) EmitEvent(serviceID, event string, data interface{}) error {
 		s.core.eventC[serviceID] = make(chan *core.EventData, 0)
 	}
 	s.core.em.Unlock()
+
 	for {
 		select {
 		case <-s.core.serviceStartC:
-		case <-s.core.listenEventC:
 		case s.core.eventC[serviceID] <- ed:
 			return nil
-		}
-	}
-}
-
-// LastEventListen returns the last result listen request's info.
-func (s *Server) LastResultListen() *ResultListen {
-	for {
-		select {
-		case <-s.core.serviceStartC:
-		case req := <-s.core.listenResultC:
-			return &ResultListen{
-				serviceID: req.ServiceID,
-				key:       req.OutputFilter,
-				task:      req.TaskFilter,
-			}
 		}
 	}
 }
@@ -101,7 +92,6 @@ func (s *Server) EmitResult(serviceID, task, outputKey string, data interface{})
 		return err
 	}
 	rd := &core.ResultData{
-		//eexecutionID
 		TaskKey:    task,
 		OutputKey:  outputKey,
 		OutputData: string(bytes),
@@ -114,25 +104,8 @@ func (s *Server) EmitResult(serviceID, task, outputKey string, data interface{})
 	for {
 		select {
 		case <-s.core.serviceStartC:
-		case <-s.core.listenResultC:
 		case s.core.resultC[serviceID] <- rd:
 			return nil
-		}
-	}
-}
-
-// LastExecute returns the last task execution's info.
-func (s *Server) LastExecute() *Execute {
-	for {
-		select {
-		case <-s.core.serviceStartC:
-		case <-s.core.listenEventC:
-		case req := <-s.core.executeC:
-			return &Execute{
-				serviceID: req.ServiceID,
-				task:      req.TaskKey,
-				data:      req.InputData,
-			}
 		}
 	}
 }
@@ -142,7 +115,12 @@ func (s *Server) MarkServiceAsNonExistent(id string) {
 	s.core.nonExistentServices = append(s.core.nonExistentServices, id)
 }
 
-// Close closes test server.
-func (s *Server) Close() error {
-	return s.socket.close()
+func (s *Server) flushServiceStarts() {
+	for {
+		select {
+		case <-s.core.serviceStartC:
+		default:
+			return
+		}
+	}
 }
