@@ -46,8 +46,7 @@ type EventEmitter struct {
 	// m protects emitter configuration.
 	m sync.Mutex
 
-	// cancel cancels listening for upcoming events.
-	cancel context.CancelFunc
+	gracefulWait *sync.WaitGroup
 }
 
 // EventCondition is the condition configurator for filtering events.
@@ -67,6 +66,7 @@ func (a *Application) WhenEvent(serviceID string, conditions ...EventCondition) 
 		app:            a,
 		eventServiceID: serviceID,
 		eventKey:       "*",
+		gracefulWait:   &sync.WaitGroup{},
 	}
 	for _, condition := range conditions {
 		condition(e)
@@ -100,7 +100,7 @@ func (e *EventEmitter) Map(fn func(*Event) Data) Executor {
 func (e *EventEmitter) Execute(serviceID, task string) (*Listener, error) {
 	e.taskServiceID = serviceID
 	e.taskKey = task
-	listener := newListener()
+	listener := newListener(e.app, e.gracefulWait)
 	if err := e.app.startServices(e.eventServiceID, serviceID); err != nil {
 		return nil, err
 	}
@@ -109,6 +109,7 @@ func (e *EventEmitter) Execute(serviceID, task string) (*Listener, error) {
 		return nil, err
 	}
 	listener.cancel = cancel
+	e.app.addListener(listener)
 	return listener, nil
 }
 
@@ -129,8 +130,10 @@ func (e *EventEmitter) listen(listener *Listener) (context.CancelFunc, error) {
 // readStream reads listen result stream.
 func (e *EventEmitter) readStream(listener *Listener, resp core.Core_ListenEventClient) {
 	for {
+		e.gracefulWait.Add(1)
 		data, err := resp.Recv()
 		if err != nil {
+			e.gracefulWait.Done()
 			listener.sendError(err)
 			return
 		}
@@ -145,6 +148,8 @@ func (e *EventEmitter) readStream(listener *Listener, resp core.Core_ListenEvent
 // execute executes the task with data returned from Map if all filters
 // are met.
 func (e *EventEmitter) execute(listener *Listener, event *Event) {
+	defer e.gracefulWait.Done()
+
 	for _, filterFunc := range e.filterFuncs {
 		if !filterFunc(event) {
 			return

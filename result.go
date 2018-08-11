@@ -51,8 +51,7 @@ type ResultEmitter struct {
 	// m protects emitter configuration.
 	m sync.Mutex
 
-	// cancel cancels listening for upcoming events.
-	cancel context.CancelFunc
+	gracefulWait *sync.WaitGroup
 }
 
 // ResultCondition is the condition configurator for filtering results.
@@ -81,6 +80,7 @@ func (a *Application) WhenResult(serviceID string, conditions ...ResultCondition
 		resultServiceID: serviceID,
 		resultTask:      "*",
 		outputKey:       "*",
+		gracefulWait:    &sync.WaitGroup{},
 	}
 	for _, condition := range conditions {
 		condition(e)
@@ -114,7 +114,7 @@ func (e *ResultEmitter) Map(fn func(*Result) Data) Executor {
 func (e *ResultEmitter) Execute(serviceID, task string) (*Listener, error) {
 	e.taskServiceID = serviceID
 	e.taskKey = task
-	listener := newListener()
+	listener := newListener(e.app, e.gracefulWait)
 	if err := e.app.startServices(e.taskServiceID, serviceID); err != nil {
 		return nil, err
 	}
@@ -123,6 +123,7 @@ func (e *ResultEmitter) Execute(serviceID, task string) (*Listener, error) {
 		return nil, err
 	}
 	listener.cancel = cancel
+	e.app.addListener(listener)
 	return listener, nil
 }
 
@@ -144,8 +145,10 @@ func (e *ResultEmitter) listen(listener *Listener) (context.CancelFunc, error) {
 // readStream reads listen result stream.
 func (e *ResultEmitter) readStream(listener *Listener, resp core.Core_ListenResultClient) {
 	for {
+		e.gracefulWait.Add(1)
 		data, err := resp.Recv()
 		if err != nil {
+			e.gracefulWait.Done()
 			listener.sendError(err)
 			return
 		}
@@ -161,6 +164,8 @@ func (e *ResultEmitter) readStream(listener *Listener, resp core.Core_ListenResu
 // execute executes the task with data returned from Map if all filters
 // are met.
 func (e *ResultEmitter) execute(listener *Listener, result *Result) {
+	defer e.gracefulWait.Done()
+
 	for _, filterFunc := range e.filterFuncs {
 		if !filterFunc(result) {
 			return

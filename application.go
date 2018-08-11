@@ -8,6 +8,7 @@ import (
 	"io"
 	"log"
 	"os"
+	"sync"
 	"time"
 
 	"github.com/mesg-foundation/core/api/core"
@@ -21,15 +22,21 @@ const (
 
 // Application represents is a MESG application.
 type Application struct {
+	// endpoint is MESG's network address.
 	endpoint string
 
 	// Client is the gRPC core client of MESG.
 	client core.CoreClient
 	conn   *grpc.ClientConn
 
+	// callTimeout used to set timeout for gRPC requests.
 	callTimeout time.Duration
 
+	// dialOptions holds dial options of gRPC.
 	dialOptions []grpc.DialOption
+
+	listeners []*Listener
+	lm        sync.Mutex
 
 	log       *log.Logger
 	logOutput io.Writer
@@ -138,7 +145,28 @@ func (a *Application) startService(ctx context.Context, id string, errC chan err
 	errC <- err
 }
 
-// Close gracefully closes underlying connections and stops listening for events.
+// Close gracefully waits current events or results to complete their process and
+// and closes underlying connections.
 func (a *Application) Close() error {
+	a.lm.Lock()
+	defer a.lm.Unlock()
+	for _, listener := range a.listeners {
+		listener.cancel()
+	}
+	for _, listener := range a.listeners {
+		listener.gracefulWait.Wait()
+	}
 	return a.conn.Close()
+}
+
+func (a *Application) addListener(listener *Listener) {
+	a.lm.Lock()
+	defer a.lm.Unlock()
+	a.listeners = append(a.listeners, listener)
+}
+
+func (a *Application) removeListener(listener *Listener) {
+	a.lm.Lock()
+	defer a.lm.Unlock()
+	a.listeners = append(a.listeners, listener)
 }
