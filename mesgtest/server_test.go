@@ -37,7 +37,7 @@ func TestLastServiceStartNonExistent(t *testing.T) {
 	_, err := server.core.StartService(context.Background(), &core.StartServiceRequest{
 		ServiceID: serviceID,
 	})
-	assert.Equal(t, errServiceDoesNotExists, err)
+	assert.Equal(t, ErrServiceDoesNotExists, err)
 
 	select {
 	case <-server.LastServiceStart():

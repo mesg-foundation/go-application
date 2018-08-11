@@ -4,6 +4,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/mesg-foundation/go-application/mesgtest"
 	"github.com/stvp/assert"
 )
 
@@ -67,11 +68,13 @@ func TestWhenEventServiceStart(t *testing.T) {
 	app, server := newApplicationAndServer(t)
 	go server.Start()
 
-	app.WhenEvent(eventServiceID).
+	_, err := app.WhenEvent(eventServiceID).
 		Map(func(*Event) Data {
 			return taskData
 		}).
 		Execute(taskServiceID, task)
+
+	assert.Nil(t, err)
 
 	lastStartIDs := []string{
 		(<-server.LastServiceStart()).ServiceID(),
@@ -81,6 +84,7 @@ func TestWhenEventServiceStart(t *testing.T) {
 	assert.True(t, stringSliceContains(lastStartIDs, eventServiceID))
 	assert.True(t, stringSliceContains(lastStartIDs, taskServiceID))
 }
+
 func TestWhenEventServiceStartError(t *testing.T) {
 	eventServiceID := "1"
 	taskData := taskRequest{"https://mesg.com"}
@@ -98,7 +102,7 @@ func TestWhenEventServiceStartError(t *testing.T) {
 		}).
 		Execute(taskServiceID, task)
 
-	assert.NotNil(t, err)
+	assert.Contains(t, mesgtest.ErrServiceDoesNotExists.Error(), err.Error())
 	assert.Nil(t, listener)
 }
 

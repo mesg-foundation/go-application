@@ -120,13 +120,13 @@ func (s *coreServer) ListenResult(request *core.ListenResultRequest,
 	}
 }
 
-var errServiceDoesNotExists = errors.New("service does not exists")
+var ErrServiceDoesNotExists = errors.New("service does not exists")
 
 func (s *coreServer) StartService(ctx context.Context,
 	request *core.StartServiceRequest) (reply *core.StartServiceReply, err error) {
 	for _, id := range s.nonExistentServices {
 		if request.ServiceID == id {
-			return &core.StartServiceReply{}, errServiceDoesNotExists
+			return &core.StartServiceReply{}, ErrServiceDoesNotExists
 		}
 	}
 	s.serviceStartC <- &ServiceStart{
