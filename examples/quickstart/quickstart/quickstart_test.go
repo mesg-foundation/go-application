@@ -75,7 +75,8 @@ func TestWhenResult(t *testing.T) {
 }
 
 func TestWhenResultFalseFilter(t *testing.T) {
-	ldata := "malformed json"
+	trueFilterData := logData{"awesome log data"}
+	falseFilterData := "malformed json"
 
 	app, server := newApplicationAndServer(t)
 	quickStart := New(app, config, LogOutputOption(ioutil.Discard))
@@ -83,9 +84,21 @@ func TestWhenResultFalseFilter(t *testing.T) {
 	go server.Start()
 	go quickStart.Start()
 
-	assert.Nil(t, server.EmitResult(config.DiscordInvServiceID, "send", "success", ldata))
+	// emit result with malformed data first.
+	assert.Nil(t, server.EmitResult(config.DiscordInvServiceID, "send", "success", falseFilterData))
+	assert.Nil(t, server.EmitResult(config.DiscordInvServiceID, "send", "success", trueFilterData))
+
+	// at this point we're sure that first, result with falseFilterData and then
+	// result with trueFilterData received by the application in order and task
+	// execution made for result with trueFilterData.
+	<-server.LastExecute()
+
+	// gracefuly close quickstart app to make sure all on-going task executions has completed.
+	quickStart.Close()
 
 	select {
+	// since false returned filter will not trigger a task execution we shouldn't get an
+	// execution notification here.
 	case <-server.LastExecute():
 		t.Error("should not execute task because filter returns false")
 	default:
@@ -108,7 +121,7 @@ func TestClose(t *testing.T) {
 
 	assert.Nil(t, server.EmitEvent(config.WebhookServiceID, "request", nil))
 	// make sure server has been started.
-	server.LastExecute()
+	<-server.LastExecute()
 
 	assert.Nil(t, quickstart.Close())
 	wg.Wait()

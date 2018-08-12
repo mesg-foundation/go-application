@@ -18,9 +18,9 @@ type coreServer struct {
 
 	executeC chan *Execute
 
-	eventC  map[string]chan *core.EventData
-	resultC map[string]chan *core.ResultData
-	em      sync.Mutex
+	event  map[string]*event
+	result map[string]*result
+	em     sync.Mutex
 
 	nonExistentServices []string
 }
@@ -31,11 +31,50 @@ func newCoreServer() *coreServer {
 		listenEventC:  make(chan *EventListen, 1),
 		listenResultC: make(chan *ResultListen, 1),
 		executeC:      make(chan *Execute, 1),
-		eventC:        make(map[string]chan *core.EventData, 0),
-		resultC:       make(map[string]chan *core.ResultData, 0),
+		event:         make(map[string]*event, 0),
+		result:        make(map[string]*result, 0),
 	}
 }
 
+type result struct {
+	dataC chan *core.ResultData
+	doneC chan error
+}
+
+func newResult() *result {
+	return &result{
+		dataC: make(chan *core.ResultData, 0),
+		doneC: make(chan error, 0),
+	}
+}
+
+func (s *coreServer) initResult(serviceID string) {
+	s.em.Lock()
+	defer s.em.Unlock()
+	if s.result[serviceID] == nil {
+		s.result[serviceID] = newResult()
+	}
+}
+
+type event struct {
+	dataC chan *core.EventData
+	doneC chan error
+}
+
+func newEvent() *event {
+	return &event{
+		dataC: make(chan *core.EventData, 0),
+		doneC: make(chan error, 0),
+	}
+}
+
+func (s *coreServer) initEvent(serviceID string) {
+	s.em.Lock()
+	defer s.em.Unlock()
+	if s.event[serviceID] == nil {
+		s.event[serviceID] = newEvent()
+	}
+}
 func (s *coreServer) DeleteService(ctx context.Context,
 	request *core.DeleteServiceRequest) (reply *core.DeleteServiceReply, err error) {
 	return &core.DeleteServiceReply{}, nil
@@ -76,20 +115,18 @@ func (s *coreServer) ListenEvent(request *core.ListenEventRequest,
 		serviceID: request.ServiceID,
 		event:     request.EventFilter,
 	}
-	s.em.Lock()
-	if s.eventC[request.ServiceID] == nil {
-		s.eventC[request.ServiceID] = make(chan *core.EventData, 0)
-	}
-	s.em.Unlock()
-
+	s.initEvent(request.ServiceID)
+	event := s.event[request.ServiceID]
 	for {
 		select {
 		case <-stream.Context().Done():
 			return nil
-		case event := <-s.eventC[request.ServiceID]:
-			if err := stream.Send(event); err != nil {
+		case data := <-event.dataC:
+			if err := stream.Send(data); err != nil {
+				event.doneC <- err
 				return err
 			}
+			event.doneC <- nil
 		}
 	}
 }
@@ -101,25 +138,23 @@ func (s *coreServer) ListenResult(request *core.ListenResultRequest,
 		key:       request.OutputFilter,
 		task:      request.TaskFilter,
 	}
-
-	s.em.Lock()
-	if s.resultC[request.ServiceID] == nil {
-		s.resultC[request.ServiceID] = make(chan *core.ResultData, 0)
-	}
-	s.em.Unlock()
-
+	s.initResult(request.ServiceID)
+	result := s.result[request.ServiceID]
 	for {
 		select {
 		case <-stream.Context().Done():
 			return nil
-		case result := <-s.resultC[request.ServiceID]:
-			if err := stream.Send(result); err != nil {
+		case data := <-result.dataC:
+			if err := stream.Send(data); err != nil {
+				result.doneC <- err
 				return err
 			}
+			result.doneC <- nil
 		}
 	}
 }
 
+// ErrServiceDoesNotExists returned when a service is not exists during service start.
 var ErrServiceDoesNotExists = errors.New("service does not exists")
 
 func (s *coreServer) StartService(ctx context.Context,

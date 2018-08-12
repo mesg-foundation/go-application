@@ -70,17 +70,13 @@ func (s *Server) EmitEvent(serviceID, event string, data interface{}) error {
 		EventKey:  event,
 		EventData: string(bytes),
 	}
-	s.core.em.Lock()
-	if s.core.eventC[serviceID] == nil {
-		s.core.eventC[serviceID] = make(chan *core.EventData, 0)
-	}
-	s.core.em.Unlock()
-
+	s.core.initEvent(serviceID)
+	serviceEvent := s.core.event[serviceID]
 	for {
 		select {
 		case <-s.core.serviceStartC:
-		case s.core.eventC[serviceID] <- ed:
-			return nil
+		case serviceEvent.dataC <- ed:
+			return <-serviceEvent.doneC
 		}
 	}
 }
@@ -96,16 +92,13 @@ func (s *Server) EmitResult(serviceID, task, outputKey string, data interface{})
 		OutputKey:  outputKey,
 		OutputData: string(bytes),
 	}
-	s.core.em.Lock()
-	if s.core.resultC[serviceID] == nil {
-		s.core.resultC[serviceID] = make(chan *core.ResultData, 0)
-	}
-	s.core.em.Unlock()
+	s.core.initResult(serviceID)
+	result := s.core.result[serviceID]
 	for {
 		select {
 		case <-s.core.serviceStartC:
-		case s.core.resultC[serviceID] <- rd:
-			return nil
+		case result.dataC <- rd:
+			return <-result.doneC
 		}
 	}
 }

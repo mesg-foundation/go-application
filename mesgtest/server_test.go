@@ -65,7 +65,7 @@ func TestLastEventListen(t *testing.T) {
 		EventFilter: eventFilter,
 	}, stream)
 
-	server.EmitEvent(serviceID, eventKey, data)
+	go server.EmitEvent(serviceID, eventKey, data)
 
 	eventData := <-stream.eventC
 	assert.Equal(t, eventKey, eventData.EventKey)
@@ -98,7 +98,7 @@ func TestLastResultListen(t *testing.T) {
 		OutputFilter: outputFilter,
 	}, stream)
 
-	server.EmitResult(serviceID, taskKey, outputKey, data)
+	go server.EmitResult(serviceID, taskKey, outputKey, data)
 
 	resultData := <-stream.resultC
 	assert.Equal(t, taskKey, resultData.TaskKey)
