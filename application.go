@@ -164,5 +164,10 @@ func (a *Application) addListener(listener *Listener) {
 func (a *Application) removeListener(listener *Listener) {
 	a.lm.Lock()
 	defer a.lm.Unlock()
-	a.listeners = append(a.listeners, listener)
+	for i, ln := range a.listeners {
+		if ln == listener {
+			a.listeners = append(a.listeners[:i], a.listeners[i+1:]...)
+			return
+		}
+	}
 }

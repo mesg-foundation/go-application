@@ -219,6 +219,24 @@ func TestWhenEventExecute(t *testing.T) {
 	assert.Equal(t, evData.URL, data.URL)
 }
 
+func TestAddAndRemoveListener(t *testing.T) {
+	eventServiceID := "1"
+	taskServiceID := "2"
+	taskKey := "3"
+
+	app, server := newApplicationAndServer(t)
+	go server.Start()
+
+	ln, _ := app.
+		WhenEvent(eventServiceID).
+		Execute(taskServiceID, taskKey)
+
+	assert.Equal(t, 1, len(app.listeners))
+
+	ln.Close()
+	assert.Equal(t, 0, len(app.listeners))
+}
+
 func stringSliceContains(s []string, e string) bool {
 	for _, a := range s {
 		if a == e {
