@@ -16,7 +16,6 @@ import (
 )
 
 const (
-	endpointEnv     = "MESG_ENDPOINT"
 	defaultEndpoint = "localhost:50052"
 )
 
@@ -48,7 +47,7 @@ type Option func(*Application)
 // New returns a new Application with options.
 func New(options ...Option) (*Application, error) {
 	a := &Application{
-		endpoint:    os.Getenv(endpointEnv),
+		endpoint:    defaultEndpoint,
 		callTimeout: time.Second * 10,
 		logOutput:   os.Stdout,
 		dialOptions: []grpc.DialOption{grpc.WithInsecure()},
@@ -57,9 +56,6 @@ func New(options ...Option) (*Application, error) {
 		option(a)
 	}
 	a.log = log.New(a.logOutput, "mesg", log.LstdFlags)
-	if a.endpoint == "" {
-		a.endpoint = defaultEndpoint
-	}
 	return a, a.setupCoreClient()
 }
 
