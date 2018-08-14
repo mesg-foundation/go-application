@@ -85,3 +85,29 @@ func TestWhenResultExecute(t *testing.T) {
 	assert.Nil(t, le.Data(&data))
 	assert.Equal(t, taskExecuteData.URL, data.URL)
 }
+
+func TestWhenResultServiceStart(t *testing.T) {
+	resultServiceID := "1"
+	taskData := taskRequest{"https://mesg.com"}
+	taskServiceID := "2"
+	task := "3"
+
+	app, server := newApplicationAndServer(t)
+	go server.Start()
+
+	_, err := app.WhenResult(resultServiceID).
+		Map(func(*Result) Data {
+			return taskData
+		}).
+		Execute(taskServiceID, task)
+
+	assert.Nil(t, err)
+
+	lastStartIDs := []string{
+		(<-server.LastServiceStart()).ServiceID(),
+		(<-server.LastServiceStart()).ServiceID(),
+	}
+
+	assert.True(t, stringSliceContains(lastStartIDs, resultServiceID))
+	assert.True(t, stringSliceContains(lastStartIDs, taskServiceID))
+}

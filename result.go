@@ -115,7 +115,7 @@ func (e *ResultEmitter) Execute(serviceID, task string) (*Listener, error) {
 	e.taskServiceID = serviceID
 	e.taskKey = task
 	listener := newListener(e.app, e.gracefulWait)
-	if err := e.app.startServices(e.taskServiceID, serviceID); err != nil {
+	if err := e.app.startServices(e.resultServiceID, serviceID); err != nil {
 		return nil, err
 	}
 	cancel, err := e.listen(listener)
