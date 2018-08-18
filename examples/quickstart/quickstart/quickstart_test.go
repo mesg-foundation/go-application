@@ -61,7 +61,7 @@ func TestWhenResult(t *testing.T) {
 	go server.Start()
 	go quickStart.Start()
 
-	assert.Nil(t, server.EmitResult(config.DiscordInvServiceID, "send", "success", ldata))
+	assert.Nil(t, server.EmitResult(config.DiscordInvServiceID, "send", "success", ldata, nil))
 
 	le := <-server.LastExecute()
 
@@ -75,8 +75,10 @@ func TestWhenResult(t *testing.T) {
 }
 
 func TestWhenResultFalseFilter(t *testing.T) {
-	trueFilterData := logData{"awesome log data"}
-	falseFilterData := "malformed json"
+	var (
+		trueFilterData  = logData{"awesome log data"}
+		falseFilterData = "malformed json"
+	)
 
 	app, server := newApplicationAndServer(t)
 	quickStart := New(app, config, LogOutputOption(ioutil.Discard))
@@ -85,8 +87,8 @@ func TestWhenResultFalseFilter(t *testing.T) {
 	go quickStart.Start()
 
 	// emit result with malformed data first.
-	assert.Nil(t, server.EmitResult(config.DiscordInvServiceID, "send", "success", falseFilterData))
-	assert.Nil(t, server.EmitResult(config.DiscordInvServiceID, "send", "success", trueFilterData))
+	assert.Nil(t, server.EmitResult(config.DiscordInvServiceID, "send", "success", falseFilterData, nil))
+	assert.Nil(t, server.EmitResult(config.DiscordInvServiceID, "send", "success", trueFilterData, nil))
 
 	// at this point we're sure that first, result with falseFilterData and then
 	// result with trueFilterData received by the application in order and task

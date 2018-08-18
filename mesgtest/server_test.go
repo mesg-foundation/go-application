@@ -51,11 +51,13 @@ type eventData struct {
 }
 
 func TestLastEventListen(t *testing.T) {
-	serviceID := "1"
-	eventKey := "2"
-	eventFilter := "3"
-	data := eventData{"https://mesg.com"}
-	dataStr := jsonMarshal(t, data)
+	var (
+		serviceID   = "1"
+		eventKey    = "2"
+		eventFilter = "3"
+		data        = eventData{"https://mesg.com"}
+		dataStr     = jsonMarshal(t, data)
+	)
 
 	server := NewServer()
 	stream := newEventDataStream()
@@ -81,13 +83,17 @@ type resultData struct {
 }
 
 func TestLastResultListen(t *testing.T) {
-	serviceID := "1"
-	taskKey := "2"
-	taskFilter := "3"
-	outputFilter := "4"
-	outputKey := "5"
-	data := resultData{"https://mesg.com"}
-	dataStr := jsonMarshal(t, data)
+	var (
+		serviceID    = "1"
+		taskKey      = "2"
+		taskFilter   = "3"
+		outputFilter = "4"
+		outputKey    = "5"
+		data         = resultData{"https://mesg.com"}
+		dataStr      = jsonMarshal(t, data)
+		tags         = []string{"tag-1", "tag-2"}
+		tags1        = []string{"tag-2", "tag-3"}
+	)
 
 	server := NewServer()
 	stream := newResultDataStream()
@@ -96,19 +102,22 @@ func TestLastResultListen(t *testing.T) {
 		ServiceID:    serviceID,
 		TaskFilter:   taskFilter,
 		OutputFilter: outputFilter,
+		TagFilters:   tags,
 	}, stream)
 
-	go server.EmitResult(serviceID, taskKey, outputKey, data)
+	go server.EmitResult(serviceID, taskKey, outputKey, data, tags1)
 
 	resultData := <-stream.resultC
 	assert.Equal(t, taskKey, resultData.TaskKey)
 	assert.Equal(t, outputKey, resultData.OutputKey)
 	assert.Equal(t, dataStr, resultData.OutputData)
+	assert.Equal(t, tags1, resultData.ExecutionTags)
 
 	ll := <-server.LastResultListen()
 	assert.Equal(t, serviceID, ll.ServiceID())
 	assert.Equal(t, taskFilter, ll.TaskFilter())
 	assert.Equal(t, outputFilter, ll.KeyFilter())
+	assert.Equal(t, tags, ll.Tags())
 }
 
 type taskExecute struct {
@@ -116,10 +125,12 @@ type taskExecute struct {
 }
 
 func TestLastExecute(t *testing.T) {
-	serviceID := "1"
-	taskKey := "2"
-	data := taskExecute{"https://mesg.com"}
-	dataStr := jsonMarshal(t, data)
+	var (
+		serviceID = "1"
+		taskKey   = "2"
+		data      = taskExecute{"https://mesg.com"}
+		dataStr   = jsonMarshal(t, data)
+	)
 
 	server := NewServer()
 

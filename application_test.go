@@ -31,7 +31,7 @@ func TestExecute(t *testing.T) {
 	app, server := newApplicationAndServer(t)
 	go server.Start()
 
-	executionID, err := app.execute(serviceID, task, reqData)
+	executionID, err := app.execute(serviceID, task, reqData, nil)
 	assert.Nil(t, err)
 	assert.True(t, executionID != "")
 

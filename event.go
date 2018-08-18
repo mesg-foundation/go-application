@@ -43,9 +43,11 @@ type EventEmitter struct {
 	// mapFunc is a func that returns input data of task.
 	mapFunc func(*Event) Data
 
-	// m protects emitter configuration.
-	m sync.Mutex
+	// executionTagsFunc is a func that returns execution tags filter.
+	executionTagsFunc func(*Event) []string
 
+	// gracefulWait will be in the done state when all processing
+	// events are done.
 	gracefulWait *sync.WaitGroup
 }
 
@@ -79,18 +81,20 @@ func (a *Application) WhenEvent(serviceID string, conditions ...EventCondition) 
 // It's possible to add multiple filters by calling Filter multiple times.
 // Other filter funcs and the task execution will no proceed if a filter
 // func returns false.
-func (e *EventEmitter) Filter(fn func(*Event) bool) *EventEmitter {
-	e.m.Lock()
-	defer e.m.Unlock()
+func (e *EventEmitter) Filter(fn func(*Event) (execute bool)) *EventEmitter {
 	e.filterFuncs = append(e.filterFuncs, fn)
+	return e
+}
+
+// SetTags sets execution tags for task executions.
+func (e *EventEmitter) SetTags(fn func(*Event) (tags []string)) *EventEmitter {
+	e.executionTagsFunc = fn
 	return e
 }
 
 // Map sets the returned data as the input data of task.
 // You can dynamically produce input values for task over event data.
 func (e *EventEmitter) Map(fn func(*Event) Data) Executor {
-	e.m.Lock()
-	defer e.m.Unlock()
 	e.mapFunc = fn
 	return e
 }
@@ -156,7 +160,11 @@ func (e *EventEmitter) execute(listener *Listener, event *Event) {
 		}
 	}
 
-	var data Data
+	var (
+		data          Data
+		executionTags []string
+	)
+
 	if e.mapFunc != nil {
 		data = e.mapFunc(event)
 	} else if err := event.Data(&data); err != nil {
@@ -164,7 +172,11 @@ func (e *EventEmitter) execute(listener *Listener, event *Event) {
 		return
 	}
 
-	if _, err := e.app.execute(e.taskServiceID, e.taskKey, data); err != nil {
+	if e.executionTagsFunc != nil {
+		executionTags = e.executionTagsFunc(event)
+	}
+
+	if _, err := e.app.execute(e.taskServiceID, e.taskKey, data, executionTags); err != nil {
 		e.app.log.Println(executionError{e.taskKey, err})
 	}
 }

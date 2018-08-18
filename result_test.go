@@ -12,13 +12,15 @@ type taskResult struct {
 }
 
 func TestWhenResult(t *testing.T) {
-	resultServiceID := "1"
-	taskResultData := taskResult{"https://mesg.tech"}
-	taskExecuteData := taskRequest{"https://mesg.com"}
-	taskServiceID := "2"
-	task := "3"
-	task1 := "4"
-	outputKey := "5"
+	var (
+		resultServiceID = "1"
+		taskResultData  = taskResult{"https://mesg.tech"}
+		taskExecuteData = taskRequest{"https://mesg.com"}
+		taskServiceID   = "2"
+		task            = "3"
+		task1           = "4"
+		outputKey       = "5"
+	)
 
 	app, server := newApplicationAndServer(t)
 	go server.Start()
@@ -45,7 +47,7 @@ func TestWhenResult(t *testing.T) {
 	assert.Nil(t, err)
 	assert.NotNil(t, stream)
 
-	server.EmitResult(resultServiceID, task, outputKey, taskResultData)
+	server.EmitResult(resultServiceID, task, outputKey, taskResultData, nil)
 
 	ll := <-server.LastResultListen()
 	assert.Equal(t, resultServiceID, ll.ServiceID())
@@ -56,13 +58,15 @@ func TestWhenResult(t *testing.T) {
 }
 
 func TestWhenResultExecute(t *testing.T) {
-	resultServiceID := "1"
-	taskResultData := taskResult{"https://mesg.tech"}
-	taskExecuteData := taskRequest{"https://mesg.com"}
-	taskServiceID := "2"
-	task := "3"
-	task1 := "4"
-	outputKey := "5"
+	var (
+		resultServiceID = "1"
+		taskResultData  = taskResult{"https://mesg.tech"}
+		taskExecuteData = taskRequest{"https://mesg.com"}
+		taskServiceID   = "2"
+		task            = "3"
+		task1           = "4"
+		outputKey       = "5"
+	)
 
 	app, server := newApplicationAndServer(t)
 	go server.Start()
@@ -74,7 +78,7 @@ func TestWhenResultExecute(t *testing.T) {
 		}).
 		Execute(taskServiceID, task1)
 
-	server.EmitResult(resultServiceID, task, outputKey, taskResultData)
+	server.EmitResult(resultServiceID, task, outputKey, taskResultData, nil)
 
 	le := <-server.LastExecute()
 
@@ -87,10 +91,12 @@ func TestWhenResultExecute(t *testing.T) {
 }
 
 func TestWhenResultServiceStart(t *testing.T) {
-	resultServiceID := "1"
-	taskData := taskRequest{"https://mesg.com"}
-	taskServiceID := "2"
-	task := "3"
+	var (
+		resultServiceID = "1"
+		taskData        = taskRequest{"https://mesg.com"}
+		taskServiceID   = "2"
+		task            = "3"
+	)
 
 	app, server := newApplicationAndServer(t)
 	go server.Start()
@@ -110,4 +116,71 @@ func TestWhenResultServiceStart(t *testing.T) {
 
 	assert.True(t, stringSliceContains(lastStartIDs, resultServiceID))
 	assert.True(t, stringSliceContains(lastStartIDs, taskServiceID))
+}
+
+func TestWhenResultTagsCondition(t *testing.T) {
+	var (
+		resultServiceID = "1"
+		taskResultData  = taskResult{"https://mesg.tech"}
+		taskExecuteData = taskRequest{"https://mesg.com"}
+		taskServiceID   = "2"
+		task            = "3"
+		task1           = "4"
+		outputKey       = "5"
+		tags            = []string{"tag-1", "tag-2"}
+	)
+
+	app, server := newApplicationAndServer(t)
+	go server.Start()
+
+	app.
+		WhenResult(resultServiceID, TagsCondition(tags...)).
+		Map(func(result *Result) Data {
+			return taskExecuteData
+		}).
+		Execute(taskServiceID, task1)
+
+	server.EmitResult(resultServiceID, task, outputKey, taskResultData, nil)
+
+	ll := <-server.LastResultListen()
+	assert.Equal(t, tags, ll.Tags())
+}
+
+func TestWhenResultSetTags(t *testing.T) {
+	var (
+		resultServiceID = "1"
+		taskResultData  = taskResult{"https://mesg.tech"}
+		taskExecuteData = taskRequest{"https://mesg.com"}
+		taskServiceID   = "2"
+		task            = "3"
+		task1           = "4"
+		outputKey       = "5"
+		tags            = []string{"tag-1", "tag-2"}
+		setTags         = []string{"tag-3", "tag-4"}
+	)
+
+	app, server := newApplicationAndServer(t)
+	go server.Start()
+
+	var wg sync.WaitGroup
+
+	wg.Add(1)
+	app.
+		WhenResult(resultServiceID).
+		SetTags(func(result *Result) []string {
+			return setTags
+		}).
+		Map(func(result *Result) Data {
+			defer wg.Done()
+			assert.Equal(t, tags, result.Tags)
+			return taskExecuteData
+		}).
+		Execute(taskServiceID, task1)
+
+	server.EmitResult(resultServiceID, task, outputKey, taskResultData, tags)
+
+	ll := <-server.LastExecute()
+	assert.Equal(t, setTags, ll.Tags())
+
+	wg.Wait()
 }

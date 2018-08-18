@@ -82,15 +82,16 @@ func (s *Server) EmitEvent(serviceID, event string, data interface{}) error {
 }
 
 // EmitResult emits a new task result for serviceID with given outputKey and data.
-func (s *Server) EmitResult(serviceID, task, outputKey string, data interface{}) error {
+func (s *Server) EmitResult(serviceID, task, outputKey string, data interface{}, executionTags []string) error {
 	bytes, err := json.Marshal(data)
 	if err != nil {
 		return err
 	}
 	rd := &core.ResultData{
-		TaskKey:    task,
-		OutputKey:  outputKey,
-		OutputData: string(bytes),
+		TaskKey:       task,
+		OutputKey:     outputKey,
+		OutputData:    string(bytes),
+		ExecutionTags: executionTags,
 	}
 	s.core.initResult(serviceID)
 	result := s.core.result[serviceID]

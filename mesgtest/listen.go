@@ -3,7 +3,7 @@ package mesgtest
 // EventListen holds information about an event listen request.
 type EventListen struct {
 	serviceID string
-	event     string
+	eventKey  string
 }
 
 // ServiceID returns the id of service that events are emitted from.
@@ -13,14 +13,15 @@ func (l *EventListen) ServiceID() string {
 
 // EventFilter returns the event name.
 func (l *EventListen) EventFilter() string {
-	return l.event
+	return l.eventKey
 }
 
 // ResultListen holds information about a result listen request.
 type ResultListen struct {
-	serviceID string
-	key       string
-	task      string
+	serviceID     string
+	outputKey     string
+	taskKey       string
+	executionTags []string
 }
 
 // ServiceID returns the id of service that results are emitted from.
@@ -30,10 +31,15 @@ func (l *ResultListen) ServiceID() string {
 
 // KeyFilter returns the output key name.
 func (l *ResultListen) KeyFilter() string {
-	return l.key
+	return l.outputKey
 }
 
 // TaskFilter returns the task key name.
 func (l *ResultListen) TaskFilter() string {
-	return l.task
+	return l.taskKey
+}
+
+// Tags returns the execution tags filter.
+func (l *ResultListen) Tags() []string {
+	return l.executionTags
 }

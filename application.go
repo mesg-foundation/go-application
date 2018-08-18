@@ -93,7 +93,8 @@ func (a *Application) setupCoreClient() error {
 }
 
 // execute executes a task for serviceID with given data.
-func (a *Application) execute(serviceID, task string, data Data) (executionID string, err error) {
+func (a *Application) execute(serviceID, task string, data Data,
+	executionTags []string) (executionID string, err error) {
 	inputDataBytes, err := json.Marshal(data)
 	if err != nil {
 		return "", err
@@ -101,9 +102,10 @@ func (a *Application) execute(serviceID, task string, data Data) (executionID st
 	ctx, cancel := context.WithTimeout(context.Background(), a.callTimeout)
 	defer cancel()
 	resp, err := a.client.ExecuteTask(ctx, &core.ExecuteTaskRequest{
-		ServiceID: serviceID,
-		TaskKey:   task,
-		InputData: string(inputDataBytes),
+		ServiceID:     serviceID,
+		TaskKey:       task,
+		InputData:     string(inputDataBytes),
+		ExecutionTags: executionTags,
 	})
 	if err != nil {
 		return "", err

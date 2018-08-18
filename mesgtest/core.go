@@ -23,6 +23,9 @@ type coreServer struct {
 	em     sync.Mutex
 
 	nonExistentServices []string
+
+	// make compiler happy for unimplemented methods
+	core.CoreServer
 }
 
 func newCoreServer() *coreServer {
@@ -75,22 +78,14 @@ func (s *coreServer) initEvent(serviceID string) {
 		s.event[serviceID] = newEvent()
 	}
 }
-func (s *coreServer) DeleteService(ctx context.Context,
-	request *core.DeleteServiceRequest) (reply *core.DeleteServiceReply, err error) {
-	return &core.DeleteServiceReply{}, nil
-}
-
-func (s *coreServer) DeployService(ctx context.Context,
-	request *core.DeployServiceRequest) (reply *core.DeployServiceReply, err error) {
-	return &core.DeployServiceReply{}, nil
-}
 
 func (s *coreServer) ExecuteTask(ctx context.Context,
 	request *core.ExecuteTaskRequest) (reply *core.ExecuteTaskReply, err error) {
 	s.executeC <- &Execute{
-		serviceID: request.ServiceID,
-		task:      request.TaskKey,
-		data:      request.InputData,
+		serviceID:     request.ServiceID,
+		task:          request.TaskKey,
+		data:          request.InputData,
+		executionTags: request.ExecutionTags,
 	}
 	uuidV4, err := uuid.NewV4()
 	id := uuidV4.String()
@@ -99,21 +94,11 @@ func (s *coreServer) ExecuteTask(ctx context.Context,
 	}, err
 }
 
-func (s *coreServer) GetService(ctx context.Context,
-	request *core.GetServiceRequest) (reply *core.GetServiceReply, err error) {
-	return &core.GetServiceReply{}, nil
-}
-
-func (s *coreServer) ListServices(ctx context.Context,
-	request *core.ListServicesRequest) (reply *core.ListServicesReply, err error) {
-	return &core.ListServicesReply{}, nil
-}
-
 func (s *coreServer) ListenEvent(request *core.ListenEventRequest,
 	stream core.Core_ListenEventServer) (err error) {
 	s.listenEventC <- &EventListen{
 		serviceID: request.ServiceID,
-		event:     request.EventFilter,
+		eventKey:  request.EventFilter,
 	}
 	s.initEvent(request.ServiceID)
 	event := s.event[request.ServiceID]
@@ -134,9 +119,10 @@ func (s *coreServer) ListenEvent(request *core.ListenEventRequest,
 func (s *coreServer) ListenResult(request *core.ListenResultRequest,
 	stream core.Core_ListenResultServer) (err error) {
 	s.listenResultC <- &ResultListen{
-		serviceID: request.ServiceID,
-		key:       request.OutputFilter,
-		task:      request.TaskFilter,
+		serviceID:     request.ServiceID,
+		outputKey:     request.OutputFilter,
+		taskKey:       request.TaskFilter,
+		executionTags: request.TagFilters,
 	}
 	s.initResult(request.ServiceID)
 	result := s.result[request.ServiceID]
@@ -168,11 +154,6 @@ func (s *coreServer) StartService(ctx context.Context,
 		serviceID: request.ServiceID,
 	}
 	return &core.StartServiceReply{}, nil
-}
-
-func (s *coreServer) StopService(ctx context.Context,
-	request *core.StopServiceRequest) (reply *core.StopServiceReply, err error) {
-	return &core.StopServiceReply{}, nil
 }
 
 type eventDataStream struct {

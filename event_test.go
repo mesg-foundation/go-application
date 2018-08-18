@@ -11,10 +11,12 @@ import (
 const endpoint = "endpoint"
 
 func TestWhenEvent(t *testing.T) {
-	eventServiceID := "1"
-	taskServiceID := "2"
-	task := "3"
-	taskData := taskRequest{"https://mesg.com"}
+	var (
+		eventServiceID = "1"
+		taskServiceID  = "2"
+		task           = "3"
+		taskData       = taskRequest{"https://mesg.com"}
+	)
 
 	app, server := newApplicationAndServer(t)
 	go server.Start()
@@ -35,11 +37,13 @@ func TestWhenEvent(t *testing.T) {
 }
 
 func TestWhenEventWithEventFilter(t *testing.T) {
-	eventServiceID := "x1"
-	taskServiceID := "x2"
-	task := "send"
-	event := "request"
-	taskData := taskRequest{"https://mesg.com"}
+	var (
+		eventServiceID = "x1"
+		taskServiceID  = "x2"
+		task           = "send"
+		event          = "request"
+		taskData       = taskRequest{"https://mesg.com"}
+	)
 
 	app, server := newApplicationAndServer(t)
 	go server.Start()
@@ -60,10 +64,12 @@ func TestWhenEventWithEventFilter(t *testing.T) {
 }
 
 func TestWhenEventServiceStart(t *testing.T) {
-	eventServiceID := "1"
-	taskData := taskRequest{"https://mesg.com"}
-	taskServiceID := "2"
-	task := "3"
+	var (
+		eventServiceID = "1"
+		taskData       = taskRequest{"https://mesg.com"}
+		taskServiceID  = "2"
+		task           = "3"
+	)
 
 	app, server := newApplicationAndServer(t)
 	go server.Start()
@@ -86,10 +92,12 @@ func TestWhenEventServiceStart(t *testing.T) {
 }
 
 func TestWhenEventServiceStartError(t *testing.T) {
-	eventServiceID := "1"
-	taskData := taskRequest{"https://mesg.com"}
-	taskServiceID := "non-existent-task-service"
-	task := "3"
+	var (
+		eventServiceID = "1"
+		taskData       = taskRequest{"https://mesg.com"}
+		taskServiceID  = "non-existent-task-service"
+		task           = "3"
+	)
 
 	app, server := newApplicationAndServer(t)
 
@@ -115,12 +123,14 @@ type eventData struct {
 }
 
 func TestWhenEventMapExecute(t *testing.T) {
-	eventServiceID := "1"
-	taskServiceID := "2"
-	task := "3"
-	event := "4"
-	reqData := taskRequest{"https://mesg.tech"}
-	evData := eventData{"https://mesg.com"}
+	var (
+		eventServiceID = "1"
+		taskServiceID  = "2"
+		task           = "3"
+		event          = "4"
+		reqData        = taskRequest{"https://mesg.tech"}
+		evData         = eventData{"https://mesg.com"}
+	)
 
 	app, server := newApplicationAndServer(t)
 	go server.Start()
@@ -164,12 +174,14 @@ func TestWhenEventMapExecute(t *testing.T) {
 }
 
 func TestWhenEventClose(t *testing.T) {
-	eventServiceID := "1"
-	taskServiceID := "2"
-	task := "3"
-	taskData := taskRequest{"https://mesg.com"}
-	event := "4"
-	evData := eventData{"https://mesg.com"}
+	var (
+		eventServiceID = "1"
+		taskServiceID  = "2"
+		task           = "3"
+		taskData       = taskRequest{"https://mesg.com"}
+		event          = "4"
+		evData         = eventData{"https://mesg.com"}
+	)
 
 	app, server := newApplicationAndServer(t)
 	go server.Start()
@@ -191,11 +203,13 @@ func TestWhenEventClose(t *testing.T) {
 }
 
 func TestWhenEventExecute(t *testing.T) {
-	eventServiceID := "1"
-	taskServiceID := "2"
-	task := "3"
-	event := "4"
-	evData := eventData{"https://mesg.com"}
+	var (
+		eventServiceID = "1"
+		taskServiceID  = "2"
+		task           = "3"
+		event          = "4"
+		evData         = eventData{"https://mesg.com"}
+	)
 
 	app, server := newApplicationAndServer(t)
 	go server.Start()
@@ -220,9 +234,11 @@ func TestWhenEventExecute(t *testing.T) {
 }
 
 func TestAddAndRemoveListener(t *testing.T) {
-	eventServiceID := "1"
-	taskServiceID := "2"
-	taskKey := "3"
+	var (
+		eventServiceID = "1"
+		taskServiceID  = "2"
+		taskKey        = "3"
+	)
 
 	app, server := newApplicationAndServer(t)
 	go server.Start()
@@ -235,6 +251,36 @@ func TestAddAndRemoveListener(t *testing.T) {
 
 	ln.Close()
 	assert.Equal(t, 0, len(app.listeners))
+}
+
+func TestWhenEventSetTags(t *testing.T) {
+	var (
+		eventServiceID  = "1"
+		taskEventData   = eventData{"https://mesg.tech"}
+		taskExecuteData = taskRequest{"https://mesg.com"}
+		taskServiceID   = "2"
+		event           = "3"
+		task            = "4"
+		setTags         = []string{"tag-1", "tag-2"}
+	)
+
+	app, server := newApplicationAndServer(t)
+	go server.Start()
+
+	app.
+		WhenEvent(eventServiceID).
+		SetTags(func(event *Event) []string {
+			return setTags
+		}).
+		Map(func(event *Event) Data {
+			return taskExecuteData
+		}).
+		Execute(taskServiceID, task)
+
+	server.EmitEvent(eventServiceID, event, taskEventData)
+
+	ll := <-server.LastExecute()
+	assert.Equal(t, setTags, ll.Tags())
 }
 
 func stringSliceContains(s []string, e string) bool {
