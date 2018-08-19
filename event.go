@@ -9,7 +9,7 @@ import (
 	"github.com/mesg-foundation/core/api/core"
 )
 
-// Event is a MESG event.
+// Event represents an event.
 type Event struct {
 	Key  string
 	data string

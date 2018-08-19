@@ -9,7 +9,7 @@ import (
 	"github.com/mesg-foundation/core/api/core"
 )
 
-// Result is MESG result event.
+// Result represents a task result.
 type Result struct {
 	TaskKey     string
 	OutputKey   string
