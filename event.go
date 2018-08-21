@@ -86,12 +86,6 @@ func (e *EventEmitter) Filter(fn func(*Event) (execute bool)) *EventEmitter {
 	return e
 }
 
-// SetTags sets execution tags for task executions.
-func (e *EventEmitter) SetTags(fn func(*Event) (tags []string)) *EventEmitter {
-	e.executionTagsFunc = fn
-	return e
-}
-
 // Map sets the returned data as the input data of task.
 // You can dynamically produce input values for task over event data.
 func (e *EventEmitter) Map(fn func(*Event) Data) Executor {

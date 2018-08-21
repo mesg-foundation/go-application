@@ -112,12 +112,6 @@ func (e *ResultEmitter) Filter(fn func(*Result) (execute bool)) *ResultEmitter {
 	return e
 }
 
-// SetTags sets execution tags for task executions.
-func (e *ResultEmitter) SetTags(fn func(*Result) (tags []string)) *ResultEmitter {
-	e.executionTagsFunc = fn
-	return e
-}
-
 // Map sets the returned data as the input data of task.
 // You can dynamically produce input values for task over result data.
 func (e *ResultEmitter) Map(fn func(*Result) Data) Executor {

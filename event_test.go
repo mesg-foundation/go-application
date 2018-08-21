@@ -253,36 +253,6 @@ func TestAddAndRemoveListener(t *testing.T) {
 	assert.Equal(t, 0, len(app.listeners))
 }
 
-func TestWhenEventSetTags(t *testing.T) {
-	var (
-		eventServiceID  = "1"
-		taskEventData   = eventData{"https://mesg.tech"}
-		taskExecuteData = taskRequest{"https://mesg.com"}
-		taskServiceID   = "2"
-		event           = "3"
-		task            = "4"
-		setTags         = []string{"tag-1", "tag-2"}
-	)
-
-	app, server := newApplicationAndServer(t)
-	go server.Start()
-
-	app.
-		WhenEvent(eventServiceID).
-		SetTags(func(event *Event) []string {
-			return setTags
-		}).
-		Map(func(event *Event) Data {
-			return taskExecuteData
-		}).
-		Execute(taskServiceID, task)
-
-	server.EmitEvent(eventServiceID, event, taskEventData)
-
-	ll := <-server.LastExecute()
-	assert.Equal(t, setTags, ll.Tags())
-}
-
 func stringSliceContains(s []string, e string) bool {
 	for _, a := range s {
 		if a == e {
