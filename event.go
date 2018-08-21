@@ -93,11 +93,11 @@ func (e *EventEmitter) Map(fn func(*Event) Data) Executor {
 	return e
 }
 
-// Execute starts for listening events and executes task for serviceID with the
+// Execute starts for listening events and executes task taskKey for serviceID with the
 // output data of event or return value of Map if all Filter funcs returned as true.
-func (e *EventEmitter) Execute(serviceID, task string) (*Listener, error) {
+func (e *EventEmitter) Execute(serviceID, taskKey string) (*Listener, error) {
 	e.taskServiceID = serviceID
-	e.taskKey = task
+	e.taskKey = taskKey
 	listener := newListener(e.app, e.gracefulWait)
 	if err := e.app.startServices(e.eventServiceID, serviceID); err != nil {
 		return nil, err

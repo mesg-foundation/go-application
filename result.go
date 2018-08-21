@@ -27,8 +27,8 @@ func (e *Result) Data(out interface{}) error {
 type ResultEmitter struct {
 	app *Application
 
-	// resultTask is the actual event to listen for.
-	resultTask string
+	// resultTaskKey is the actual result to listen for.
+	resultTaskKey string
 
 	//resultServiceID is the service id of where result is emitted.
 	resultServiceID string
@@ -63,27 +63,27 @@ type ResultEmitter struct {
 // ResultCondition is the condition configurator for filtering results.
 type ResultCondition func(*ResultEmitter)
 
-// TaskKeyCondition returns a new option to filter results by task name.
+// TaskKeyCondition returns a new option to filter results by taskKey.
 // Default is all(*).
-func TaskKeyCondition(task string) ResultCondition {
+func TaskKeyCondition(taskKey string) ResultCondition {
 	return func(e *ResultEmitter) {
-		e.resultTask = task
+		e.resultTaskKey = taskKey
 	}
 }
 
-// OutputKeyCondition returns a new option to filter results by output key name.
+// OutputKeyCondition returns a new option to filter results by outputKey.
 // Default is all(*).
-func OutputKeyCondition(key string) ResultCondition {
+func OutputKeyCondition(outputKey string) ResultCondition {
 	return func(e *ResultEmitter) {
-		e.outputKey = key
+		e.outputKey = outputKey
 	}
 }
 
-// TagsCondition returns a new option to filter results by execution tags.
+// TagsCondition returns a new option to filter results by executionTags.
 // This is a "match all" algorithm. All tags should be included in the execution to have a match.
-func TagsCondition(tags ...string) ResultCondition {
+func TagsCondition(executionTags ...string) ResultCondition {
 	return func(e *ResultEmitter) {
-		e.executionTags = tags
+		e.executionTags = executionTags
 	}
 }
 
@@ -92,7 +92,7 @@ func (a *Application) WhenResult(serviceID string, conditions ...ResultCondition
 	e := &ResultEmitter{
 		app:             a,
 		resultServiceID: serviceID,
-		resultTask:      "*",
+		resultTaskKey:   "*",
 		outputKey:       "*",
 		gracefulWait:    &sync.WaitGroup{},
 	}
@@ -119,11 +119,11 @@ func (e *ResultEmitter) Map(fn func(*Result) Data) Executor {
 	return e
 }
 
-// Execute starts for listening events and executes task for serviceID with the
+// Execute starts for listening events and executes task taskKey for serviceID with the
 // output data of result or return value of Map if all Filter funcs returned as true.
-func (e *ResultEmitter) Execute(serviceID, task string) (*Listener, error) {
+func (e *ResultEmitter) Execute(serviceID, taskKey string) (*Listener, error) {
 	e.taskServiceID = serviceID
-	e.taskKey = task
+	e.taskKey = taskKey
 	listener := newListener(e.app, e.gracefulWait)
 	if err := e.app.startServices(e.resultServiceID, serviceID); err != nil {
 		return nil, err
@@ -142,7 +142,7 @@ func (e *ResultEmitter) listen(listener *Listener) (context.CancelFunc, error) {
 	ctx, cancel := context.WithCancel(context.Background())
 	resp, err := e.app.client.ListenResult(ctx, &core.ListenResultRequest{
 		ServiceID:    e.resultServiceID,
-		TaskFilter:   e.resultTask,
+		TaskFilter:   e.resultTaskKey,
 		OutputFilter: e.outputKey,
 		TagFilters:   e.executionTags,
 	})
