@@ -5,7 +5,7 @@ package mesgtest
 import (
 	"encoding/json"
 
-	"github.com/mesg-foundation/core/api/core"
+	core "github.com/mesg-foundation/go-application/proto"
 )
 
 // Server is a test server.

@@ -5,7 +5,7 @@ import (
 	"errors"
 	"sync"
 
-	"github.com/mesg-foundation/core/api/core"
+	core "github.com/mesg-foundation/go-application/proto"
 	uuid "github.com/satori/go.uuid"
 	"google.golang.org/grpc"
 )
