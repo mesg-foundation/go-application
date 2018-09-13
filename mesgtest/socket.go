@@ -3,7 +3,7 @@ package mesgtest
 import (
 	"net"
 
-	"github.com/mesg-foundation/core/api/core"
+	core "github.com/mesg-foundation/go-application/proto"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/test/bufconn"
 )
